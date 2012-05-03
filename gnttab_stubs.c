@@ -55,7 +55,7 @@ CAMLprim value stub_xc_gnttab_map_grant_ref(value xgh, value domid, value ref, v
 		caml_failwith("Failed to map grant ref");
 	}
 
-	CAMLreturn(caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT | CAML_BA_MANAGED, 1, map, 1 << XC_PAGE_SHIFT));
+	CAMLreturn(caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT | CAML_BA_EXTERNAL, 1, map, 1 << XC_PAGE_SHIFT));
 }
 
 CAMLprim value stub_xc_gnttab_map_grant_refs(value xgh, value refs_and_domids, value prot)
@@ -78,3 +78,46 @@ CAMLprim value stub_xc_gnttab_unmap(value xgh, value array)
 	CAMLreturn(Val_unit);
 }
 
+/* Blit from a string to a page */
+CAMLprim value stub_xc_gnttab_string_blit(value src, value srcoff, value dst, value dstoff, value len)
+{
+	CAMLparam5(src,srcoff,dst,dstoff,len);
+
+	if(Int_val(dstoff)+Int_val(len) > PAGE_SIZE) {
+		caml_failwith("xxBlit exceeds page boundary");
+	}
+	
+	if(caml_string_length(src) - Int_val(srcoff) > Int_val(len)) {
+		caml_failwith("Blit overruns end of string");
+	}
+
+	char *str = String_val(src);
+	char *page = Caml_ba_data_val(dst);
+
+	memcpy(page+Int_val(dstoff),str+Int_val(srcoff),Int_val(len));
+	
+	CAMLreturn(Val_unit);
+}
+
+/* Blit from a page to a string */
+CAMLprim value stub_xc_gnttab_ring_blit(value src, value srcoff, value dst, value dstoff, value len)
+{
+	CAMLparam5(src,srcoff,dst,dstoff,len);
+
+	if(Int_val(srcoff)+Int_val(len) > PAGE_SIZE) {
+		caml_failwith("Blit exceeds page boundary");
+	}
+	
+	if(caml_string_length(dst) - Int_val(dstoff) > Int_val(len)) {
+		caml_failwith("Blit overruns end of string");
+	}
+
+	char *str = String_val(dst);
+	char *page = Caml_ba_data_val(src);
+
+	memcpy(str+Int_val(dstoff),
+		   page+Int_val(srcoff),
+		   Int_val(len));
+	
+	CAMLreturn(Val_unit);
+}

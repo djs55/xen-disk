@@ -19,6 +19,28 @@
 (** Abstract type for a shared ring *)
 type sring
 
+val init_back :
+  xg:Gnttab.handle ->
+  domid:int32 -> gref:int32 -> idx_size:int -> name:string -> sring
+val destroy_back :
+	xg:Gnttab.handle -> sring -> unit
+
+external sring_rsp_prod : sring -> int = "caml_sring_rsp_prod"
+external sring_req_prod : sring -> int = "caml_sring_req_prod"
+external sring_req_event : sring -> int = "caml_sring_req_event"
+external sring_rsp_event : sring -> int = "caml_sring_rsp_event"
+external sring_push_requests : sring -> int -> unit
+  = "caml_sring_push_requests"
+external sring_push_responses : sring -> int -> unit
+  = "caml_sring_push_responses"
+external sring_set_rsp_event : sring -> int -> unit
+  = "caml_sring_set_rsp_event"
+external sring_set_req_event : sring -> int -> unit
+  = "caml_sring_set_req_event"
+val nr_ents : sring -> int
+val slot : sring -> int -> Gnttab.t * int * int
+
+
 (** The front-end of the shared ring, which issues requests and reads
     responses from the remote domain. 
   *)
@@ -37,7 +59,7 @@ module Front : sig
     * a Bitstring.
     * @param idx Index to retrieve, should be less than nr_ents
     *)
-  val slot : ('a,'b) t -> int -> Bitstring.t
+  val slot : ('a,'b) t -> int -> Gnttab.t * int * int
 
   (** Retrieve number of slots in the shared ring *)
   val nr_ents : ('a,'b) t -> int
@@ -58,7 +80,7 @@ module Front : sig
     * the responses and wake up any sleeping threads that were
     * waiting for that particular response.
     *)
-  val ack_responses : ('a,'b) t -> (Bitstring.t -> unit) -> unit
+  val ack_responses : ('a,'b) t -> (Gnttab.t * int * int -> unit) -> unit
 
   (** Update the shared request producer *)
   val push_requests : ('a,'b) t -> unit
@@ -77,44 +99,51 @@ module Front : sig
       @param fn Function that writes to a request slot and returns the request id
       @return Thread which returns the response value to the input request
     *)
-  val push_request_and_wait : ('a,'b) t -> (Bitstring.t -> 'b) -> 'a Lwt.t
+  val push_request_and_wait : ('a,'b) t -> (Gnttab.t * int * int -> 'b) -> 'a Lwt.t
 
   (** Poll the ring for responses, and wake up any threads that are
       sleeping (as a result of calling {[push_request_and_wait]}).
     *)
-  val poll : ('a,'b) t -> (Bitstring.t -> ('b * 'a)) -> unit
+  val poll : ('a,'b) t -> (Gnttab.t * int * int -> ('b * 'a)) -> unit
 end
 
 module Back : sig
   (** 'a is the response type, and 'b is the request id type (e.g. int or int64) *)
-  type ('a,'b) t
+  type t
 
   (** Given a shared ring, initialise it for this backend module
     * @param sring Shared ring to attach this backend to
     * @return backend ring value
     *)
-  val init : sring:sring -> ('a,'b) t
+  val init : sring:sring -> t
 
   (** Retrieve the request/response slot at the specified index as
     * a Bitstring.
     * @param idx Index to retrieve, should be less than nr_ents
     *)
-  val slot : ('a,'b) t -> int -> Bitstring.t
+  val slot :  t -> int -> Gnttab.t * int * int
 
   (** Retrieve number of slots in the shared ring *)
-  val nr_ents : ('a,'b) t -> int
+  val nr_ents :  t -> int
 
   (** Advance the response producer and return the latest slot id *)
-  val next_res_id: ('a,'b) t -> int
+  val next_res_idx:  t -> int
 
+  val next_slot: t -> Gnttab.t * int * int
   (** Update the shared response producer *)
-  val push_responses : ('a,'b) t -> unit
+  val push_responses :  t -> unit
 
   (** Update the shared response producer, and also check to see
       if an event notification is required to wake up the remote
       domain.
       @return true if an event channel notification is required
     *)
-  val push_responses_and_check_notify : ('a,'b) t -> bool
+  val push_responses_and_check_notify :  t -> bool
+
+  val more_to_do : t -> bool
+
+  val write_response : t -> string -> bool * bool
+
+  val service_thread : t -> int -> (Gnttab.t * int * int -> unit) -> unit Lwt.t
 end
 

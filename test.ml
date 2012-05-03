@@ -3,7 +3,9 @@
 let map domid gntref =
 	let xg = Gnttab.interface_open () in
 	let b = Gnttab.map_grant_ref xg domid gntref 3 in
-    Printf.printf "%d\n" b.{0};
+	for i=0 to 4095 do 
+		Printf.printf "%c" (Char.chr b.{0});
+	done;
 	Gnttab.interface_close xg
 
 		

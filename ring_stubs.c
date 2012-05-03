@@ -15,6 +15,7 @@
  */
 
 #include <stdint.h>
+#include <assert.h>
 
 #include <xen/io/netif.h>
 #include <xen/io/blkif.h>
@@ -24,8 +25,13 @@
 #include <caml/mlvalues.h>
 #include <caml/alloc.h>
 #include <caml/memory.h>
+#include <caml/bigarray.h>
 
 #define PAGE_SIZE 4096
+
+#define xen_mb() __sync_synchronize()
+#define xen_wmb() __sync_synchronize()
+
 
 /* Shared ring with request/response structs */
 
@@ -35,7 +41,7 @@ struct sring {
   uint8_t  pad[64];
 };
 
-#define SRING_VAL(x) ((struct sring *)(Caml_ba_data_val(x)))
+#define SRING_VAL(x) ((struct sring *)(Caml_ba_data_val(Field(x,0))))
 
 CAMLprim value
 caml_sring_rsp_prod(value v_sring)
@@ -67,7 +73,7 @@ CAMLprim value
 caml_sring_push_requests(value v_sring, value v_req_prod_pvt)
 {
   struct sring *sring = SRING_VAL(v_sring);
-  ASSERT(((unsigned long)sring % PAGE_SIZE) == 0);
+  assert(((unsigned long)sring % PAGE_SIZE) == 0);
   xen_wmb(); /* ensure requests are seen before the index is updated */
   sring->req_prod = Int_val(v_req_prod_pvt);
   return Val_unit;

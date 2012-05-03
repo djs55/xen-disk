@@ -17,6 +17,8 @@
 open Lwt
 open Printf
 
+let logger = Lwt_log.channel ~close_mode:`Keep ~channel:Lwt_io.stdout ()
+
 (*
   struct sring {
     RING_IDX req_prod, req_event;
@@ -27,31 +29,27 @@ open Printf
 *)
 
 type sring = {
-  buf: string;      (* Overall I/O buffer *)
-  off: int;         (* Offset into I/O buffer (in bits, not bytes *)
-  header_size: int; (* Header of shared ring variables, in bits *)
-  idx_size: int;    (* Size in bits of an index slot *)
+  buf: Gnttab.t;    (* Overall I/O buffer *)
+  header_size: int; (* Header of shared ring variables, in bytes *)
+  idx_size: int;    (* Size in bytes of an index slot *)
   nr_ents: int;     (* Number of index entries *)
   name: string;     (* For pretty printing only *)
 }
 
-(*let init ~domid ~idx_size ~name =
-  lwt gnt, (buf, off, len) = alloc ~domid in
-  assert (len = (4096 * 8));
-  let header_size = 32+32+32+32+(48*8) in (* header bits size of struct sring *)
+let init_back ~xg ~domid ~gref ~idx_size ~name =
+  let buf = Gnttab.map_grant_ref xg domid gref 3 in
+  let header_size = 4+4+4+4+(6*8) in (* header bits size of struct sring *)
   (* Round down to the nearest power of 2, so we can mask indices easily *)
   let round_down_to_nearest_2 x =
     int_of_float (2. ** (floor ( (log (float x)) /. (log 2.)))) in
   (* Free space in shared ring after header is accounted for *)
-  let free_bytes = 4096 - (header_size / 8) in
+  let free_bytes = 4096 - header_size in
   let nr_ents = round_down_to_nearest_2 (free_bytes / idx_size) in
   (* We store idx_size in bits, for easier Bitstring offset calculations *)
-  let idx_size = idx_size * 8 in
-  let t = { name; buf; off; idx_size; nr_ents; header_size } in
-  (* initialise the *_event fields to 1, and the rest to 0 *)
-  let src,_,_ = BITSTRING { 0l:32; 1l:32:littleendian; 0l:32; 1l:32:littleendian; 0L:64 } in
-  String.blit src 0 buf (off/8) (String.length src);
-  return (gnt,t)*)
+  { name; buf; idx_size; nr_ents; header_size } 
+
+let destroy_back ~xg t =
+	Gnttab.unmap xg t.buf
 
 external sring_rsp_prod: sring -> int = "caml_sring_rsp_prod"
 external sring_req_prod: sring -> int = "caml_sring_req_prod" 
@@ -67,7 +65,7 @@ let nr_ents sring = sring.nr_ents
 let slot sring idx =
   (* TODO should precalculate these and store in the sring? this is fast-path *)
   let idx = idx land (sring.nr_ents - 1) in
-  let off = sring.off + sring.header_size + (idx * sring.idx_size) in
+  let off = sring.header_size + (idx * sring.idx_size) in
   (sring.buf, off, sring.idx_size)
 
 module Front = struct
@@ -166,20 +164,16 @@ end
 
 module Back = struct
 
-  type ('a,'b) t = {
+  type (*('a,'b)*) t = {
     mutable rsp_prod_pvt: int;
     mutable req_cons: int;
     sring: sring;
-    wakers: ('b, 'a Lwt.u) Hashtbl.t; (* id * wakener *)
-    waiters: unit Lwt.u Lwt_sequence.t;
   }
 
   let init ~sring =
     let rsp_prod_pvt = 0 in
     let req_cons = 0 in
-    let wakers = Hashtbl.create 7 in
-    let waiters = Lwt_sequence.create () in
-    { rsp_prod_pvt; req_cons; sring; wakers; waiters }
+    { rsp_prod_pvt; req_cons; sring; }
 
   let slot t idx = slot t.sring idx
   let nr_ents t = t.sring.nr_ents
@@ -206,10 +200,59 @@ module Back = struct
       has_unconsumed_requests t
     end
 
-  let next_res_id t =
+  let next_res_idx t =
     let s = t.rsp_prod_pvt in
     t.rsp_prod_pvt <- t.rsp_prod_pvt + 1;
     s
+
+  let next_slot t =
+      slot t (next_res_idx t)
+
+  let final_check_for_requests t =
+	  has_unconsumed_requests t ||
+		  begin
+			  sring_set_req_event t.sring (t.req_cons + 1);
+			  has_unconsumed_requests t
+		  end
+
+  let more_to_do t =
+	  if t.rsp_prod_pvt = t.req_cons then
+		  final_check_for_requests t
+	  else 
+		  has_unconsumed_requests t
+
+  let string_of_state t =
+	  let req_prod = sring_req_prod t.sring in
+	  let rsp_prod = sring_rsp_prod t.sring in
+	  let req_event = sring_req_event t.sring in
+	  let rsp_event = sring_rsp_event t.sring in
+	  Printf.sprintf "{ req_prod=%d rsp_prod=%d req_event=%d rsp_event=%d rsp_prod_pvt=%d req_cons=%d }" req_prod rsp_prod req_event rsp_event t.rsp_prod_pvt t.req_cons
+
+  let rec ack_requests t fn =
+    let req_prod = sring_req_prod t.sring in
+    while t.req_cons != req_prod do
+      let slot_id = t.req_cons in
+      let slot = slot t slot_id in
+      t.req_cons <- t.req_cons + 1;
+      fn slot;
+    done;
+    if check_for_requests t then ack_requests t fn
+
+  let write_response t rsp =
+	  let (bs,bsoff,bslen) = next_slot t in
+	  let rsplen = String.length rsp in
+      Gnttab.strblit rsp 0 bs bsoff rsplen;
+	  let notify = push_responses_and_check_notify t in
+	  let more_to_do = more_to_do t in
+	  (more_to_do, notify)
+
+
+  let service_thread t evtchn fn =
+	  let rec inner () =
+		  ack_requests t fn;
+		  Activations.wait evtchn >>
+		  inner ()
+	  in inner ()
 
 end
 
