@@ -17,8 +17,6 @@
 open Lwt
 open Printf
 
-let logger = Lwt_log.channel ~close_mode:`Keep ~channel:Lwt_io.stdout ()
-
 (*
   struct sring {
     RING_IDX req_prod, req_event;

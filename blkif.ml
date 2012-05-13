@@ -17,6 +17,10 @@
 open Lwt
 open Printf
 
+type proto = | X86_64 | X86_32 | Native
+
+
+
 (* Request of a page *)
 module Req = struct
   type op = 
@@ -47,12 +51,20 @@ module Req = struct
 
   let segments_per_request = 11 (* Defined by the protocol *)
   let seg_size = 8 (* bytes, 6 +2 struct padding *)
-  let idx_size =  (* total size of a request structure, in bytes *)
+  let idx_size_64 =  (* total size of a request structure, in bytes *)
     1 + (* operation *)
     1 + (* nr_segments *)
     2 + (* handle *)
     4 + (* struct padding to 64-bit *)
     8 + (* id *)
+    8 + (* sector number *)
+    (seg_size * segments_per_request) 
+
+  let idx_size_32 = (* total size of a request structure, in bytes *)
+	1 + (* operation *)
+    1 + (* nr_segments *)
+	2 + (* handle *)
+	8 + (* id *)
     8 + (* sector number *)
     (seg_size * segments_per_request) 
 
@@ -70,7 +82,7 @@ module Req = struct
 
   (* Write a request to a slot in the shared ring. Could be optimised a little
      more to minimise allocation, if it matters. *)
-  let write_request req (bs,bsoff,bslen) =
+  let write_request_64 req (bs,bsoff,bslen) =
     let op = op_to_int req.op in
     let nr_segs = Array.length req.segs in
     let segs = Bitstring.concat (Array.to_list (Array.map make_seg req.segs)) in
@@ -81,11 +93,36 @@ module Req = struct
     Gnttab.strblit reqbuf 0 bs bsoff (reqlen/8);
     req.id
 
+  let write_request_32 req (bs,bsoff,bslen) =
+    let op = op_to_int req.op in
+    let nr_segs = Array.length req.segs in
+    let segs = Bitstring.concat (Array.to_list (Array.map make_seg req.segs)) in
+    let reqbuf,_,reqlen = BITSTRING {
+      op:8:littleendian; nr_segs:8:littleendian;
+      req.handle:16:littleendian; req.id:64:littleendian;
+      req.sector:64:littleendian; segs:-1:bitstring } in
+    Gnttab.strblit reqbuf 0 bs bsoff (reqlen/8);
+    req.id
+
   (* Read a request out of a bitstring; to be used by the Ring.Back for serving
      requests, so this is untested for now *)
-  let read_request bs =
+  let read_request_64 bs =
     bitmatch bs with
     | { op:8:littleendian; nr_segs:8:littleendian; handle:16:littleendian; 0l:32;
+        id:64:littleendian; sector:64:littleendian; segs:-1:bitstring } ->
+          let seglen = seg_size * 8 in
+          let segs = Array.init nr_segs (fun i ->
+            bitmatch (Bitstring.subbitstring segs (i*seglen) seglen) with
+            | { gref:32:littleendian; first_sector:8:littleendian;
+                last_sector:8:littleendian } ->
+                 {gref; first_sector; last_sector }
+          ) in
+          let op = op_of_int op in
+          { op; handle; id; sector; segs }
+
+  let read_request_32 bs =
+    bitmatch bs with
+    | { op:8:littleendian; nr_segs:8:littleendian; handle:16:littleendian;
         id:64:littleendian; sector:64:littleendian; segs:-1:bitstring } ->
           let seglen = seg_size * 8 in
           let segs = Array.init nr_segs (fun i ->
@@ -159,43 +196,68 @@ module Backend = struct
 		xg:     Gnttab.handle;
 		evtchn: int;
         r :     Ring.Back.t; 
-	    ops :   ops; }
+	    ops :   ops;
+		parse_req : Bitstring.t -> Req.t;
+		write_res : (int64 * Res.t) -> string;
+	}
 
+	let string_of_segs segs = 
+		Printf.sprintf "[%s]" (
+			String.concat "," (List.map (fun seg ->
+				Printf.sprintf "{gref=%ld first=%d last=%d}" seg.Req.gref seg.Req.first_sector seg.Req.last_sector) (Array.to_list segs)))
+
+	let string_of_req req =
+		Printf.sprintf "op=%s\nhandle=%d\nid=%Ld\nsector=%Ld\nsegs=%s\n" (Req.string_of_op req.Req.op) req.Req.handle
+			req.Req.id req.Req.sector (string_of_segs req.Req.segs)
 
 	let process t (slot, from, len) =
 		let open Req in
-		let req = read_request (Bitstring.bitstring_of_string (Gnttab.read slot from len)) in
+		let req = t.parse_req (Bitstring.bitstring_of_string (Gnttab.read slot from len)) in
 		let fn = match req.op with
 			| Read -> t.ops.read
 			| Write -> t.ops.write
 		in
-		let (_,threads) = List.fold_right (fun seg (off,threads) ->
+		let (_,threads) = List.fold_left (fun (off,threads) seg ->
 			let sector = Int64.add req.sector (Int64.of_int off) in
-			let thread = Gnttab.with_ref t.xg t.domid seg.gref 3 (fun buf ->
+			let prot = match req.op with | Read -> 3 | Write -> 1 in
+			let thread = Gnttab.with_ref t.xg t.domid seg.gref prot (fun buf ->
 				fn buf sector seg.first_sector seg.last_sector) in 
-			let newoff = off + (seg.last_sector - seg.first_sector) in
-			(newoff,thread::threads)) (Array.to_list req.segs) (0, []) 
+			let newoff = off + (seg.last_sector - seg.first_sector + 1) in
+			(newoff,thread::threads)) (0, []) (Array.to_list req.segs) 
 		in
 		let response_thread = 
 			lwt () = Lwt.join threads in
 		    let open Res in 
-		    let rsp = make_response (req.id, {op=req.Req.op; st=OK}) in
+		    let rsp = t.write_res (req.id, {op=req.Req.op; st=OK}) in
 		    let more_to_do, notify = Ring.Back.write_response t.r rsp in
 		    if more_to_do then Activations.wake t.evtchn;
 		    if notify then Xeneventchn.notify Activations.xe t.evtchn;
 		    Lwt.return ()
         in ()
 
-	let init xg domid ring_ref evtchn_ref ops =
+	let init xg domid ring_ref evtchn_ref proto ops =
 		let xe = Activations.xe in
 		let fd = Xeneventchn.fd xe in
 		let evtchn = Xeneventchn.bind_interdomain xe domid evtchn_ref in
 		let domid = Int32.of_int domid in
+		let parse_req, write_res,idx_size = match proto with
+			| X86_64 -> Req.read_request_64, Res.make_response, Req.idx_size_64
+			| X86_32 -> Req.read_request_32, Res.make_response, Req.idx_size_32
+			| Native -> Req.read_request_64, Res.make_response, Req.idx_size_64
+		in
 		let ring = Ring.init_back ~xg ~domid
-			~gref:ring_ref ~idx_size:Req.idx_size ~name:"blkback" in
+			~gref:ring_ref ~idx_size ~name:"blkback" in
 		let r = Ring.Back.init ring in
-		let t = { domid; xg; evtchn; r; ops } in
+		let t = { domid; xg; evtchn; r; ops; parse_req; write_res } in
 		let ring_thread = Ring.Back.service_thread r evtchn (process t) in
+		let poker = 
+			let rec inner () = 
+				lwt () = Lwt_unix.sleep 5.0 in
+			    Activations.wake evtchn;
+				Xeneventchn.notify Activations.xe evtchn;
+			    inner ()
+		    in inner ()
+	    in 
 		on_cancel ring_thread (fun () -> Ring.destroy_back ~xg ring);
 		ring_thread
 

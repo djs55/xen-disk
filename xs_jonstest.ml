@@ -44,7 +44,7 @@ let do_read mmap buf offset sector_start sector_end =
 
 let do_write mmap buf offset sector_start sector_end =
 	let offset = Int64.to_int offset in
-    let len = (sector_end - sector_start) * 512 in
+    let len = (sector_end - sector_start + 1) * 512 in
 	Lwt_bytes.unsafe_blit buf (sector_start * 512) mmap (offset * 512) len;
 	Lwt.return ()
  
@@ -70,6 +70,7 @@ let handle_backend client (domid,devid) =
 
     lwt () = Lwt_log.error ~logger ("Params=" ^ params ^ "\n") in
 
+    try_lwt 
     lwt mmapfd = Lwt_unix.openfile Sys.argv.(1) [Unix.O_RDWR] 0o644 in
     let mmap = Lwt_bytes.map_file ~fd:(Lwt_unix.unix_file_descr mmapfd) ~shared:true () in
 
@@ -83,30 +84,39 @@ let handle_backend client (domid,devid) =
 
     lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "sector-size") "512") in
     lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "sectors") (Printf.sprintf "%Ld" (Int64.div size 512L))) in
+    lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid, devid) "info") "1") in
     lwt frontend = with_xs client (fun xs -> read xs (mk_backend_path (domid,devid) "frontend")) in
-
+   
     let handled=ref false in
 
     wait client (fun xs -> 
 	   lwt state = read xs (frontend ^ "/state") in
        match state with
        | "1"
-	   | "2"
-	   | "3" ->
+	   | "2" ->
 		   lwt () = Lwt_log.error_f ~logger "state=%s\n" state in
 		   raise Eagain
-	   | "4" ->
-		   lwt () = Lwt_log.error_f ~logger "3 (frontend state=4)\n" in
+	   | "3" ->
+		   lwt () = Lwt_log.error_f ~logger "3 (frontend state=3)\n" in
 		   lwt ring_ref = with_xs client (fun xs -> read xs (frontend ^ "/ring-ref")) in
            let ring_ref = Int32.of_string ring_ref in
 	       lwt evtchn = with_xs client (fun xs -> read xs (frontend ^ "/event-channel")) in
            let evtchn = int_of_string evtchn in
-           lwt () = Lwt_log.error_f ~logger "Got ring-ref=%ld evtchn=%d\n" ring_ref evtchn in
-           lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "state") "4") in
+
+		   lwt protocol = try_lwt with_xs client (fun xs -> read xs (frontend ^ "/protocol")) with _ -> return "native" in
+     
+           lwt () = Lwt_log.error_f ~logger "Got ring-ref=%ld evtchn=%d protocol=%s\n" ring_ref evtchn protocol in
+           let proto = match protocol with
+			   | "x86_32-abi" -> Blkif.X86_32
+			   | "x86_64-abi" -> Blkif.X86_64
+			   | "native" -> Blkif.Native
+		   in
+
            begin if not !handled then 
-			   let be_thread = Blkif.Backend.init xg domid ring_ref evtchn {
+			   let be_thread = Blkif.Backend.init xg domid ring_ref evtchn proto {
 				   Blkif.Backend.read = do_read mmap;
 				   Blkif.Backend.write = do_write mmap } in
+			   ignore(with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "state") "4"));
 			   let waiter = 
 				   lwt () = wait client 
 				       (fun xs -> 
@@ -119,17 +129,20 @@ let handle_backend client (domid,devid) =
 					           return ()); 
                    in
                    Lwt.cancel be_thread;
-	               return ()
+	               Lwt.return ()
                in
 (*handle_ring mmap client (domid,devid) frontend ring_ref evtchn in*)
 			   handled := true
 		   else 
 			   () 
 		   end;
-           raise Eagain
+           return ()
        | "5"
 	   | _ ->
            return ())
+    with e ->
+		lwt () = Lwt_log.error_f ~logger "exn: %s" (Printexc.to_string e) in
+        return ()
 
 let rec new_backends_loop client =
 	with_xs client (fun xs -> 
