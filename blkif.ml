@@ -19,7 +19,7 @@ open Printf
 
 type proto = | X86_64 | X86_32 | Native
 
-
+let logger = Lwt_log.channel ~close_mode:`Keep ~channel:Lwt_io.stdout ()
 
 (* Request of a page *)
 module Req = struct
