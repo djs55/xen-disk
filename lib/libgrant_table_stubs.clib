@@ -1,0 +1,5 @@
+# OASIS_START
+# DO NOT EDIT (digest: b5cdf7b6071d2682483d9132b15ebaf8)
+gnttab_stubs.o
+evtchn_stubs.o
+# OASIS_STOP

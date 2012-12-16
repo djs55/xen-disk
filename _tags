@@ -1,0 +1,57 @@
+# OASIS_START
+# DO NOT EDIT (digest: f3d2c81a6151dc55fd51be092531893a)
+# Ignore VCS directories, you can use the same kind of rule outside 
+# OASIS_START/STOP if you want to exclude directories that contains 
+# useless stuff for the build process
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+# Library grant_table
+"lib/grant_table.cmxs": use_grant_table
+<lib/grant_table.{cma,cmxa}>: oasis_library_grant_table_cclib
+"lib/libgrant_table_stubs.lib": oasis_library_grant_table_cclib
+"lib/dllgrant_table_stubs.dll": oasis_library_grant_table_cclib
+"lib/libgrant_table_stubs.a": oasis_library_grant_table_cclib
+"lib/dllgrant_table_stubs.so": oasis_library_grant_table_cclib
+<lib/grant_table.{cma,cmxa}>: use_libgrant_table_stubs
+<lib/*.ml{,i}>: pkg_lwt
+<lib/*.ml{,i}>: pkg_lwt.unix
+<lib/*.ml{,i}>: pkg_lwt.syntax
+"lib/gnttab_stubs.c": pkg_lwt
+"lib/gnttab_stubs.c": pkg_lwt.unix
+"lib/gnttab_stubs.c": pkg_lwt.syntax
+"lib/evtchn_stubs.c": pkg_lwt
+"lib/evtchn_stubs.c": pkg_lwt.unix
+"lib/evtchn_stubs.c": pkg_lwt.syntax
+# Executable xs_jonstest
+<example/xs_jonstest.{native,byte,nobj.o}>: use_grant_table
+<example/xs_jonstest.{native,byte,nobj.o}>: pkg_xenstore
+<example/xs_jonstest.{native,byte,nobj.o}>: pkg_xenstore.client
+<example/xs_jonstest.{native,byte,nobj.o}>: pkg_xenstore_client_unix
+<example/xs_jonstest.{native,byte,nobj.o}>: pkg_lwt
+<example/xs_jonstest.{native,byte,nobj.o}>: pkg_lwt.unix
+<example/xs_jonstest.{native,byte,nobj.o}>: pkg_bitstring
+<example/xs_jonstest.{native,byte,nobj.o}>: pkg_bitstring.syntax
+<example/xs_jonstest.{native,byte,nobj.o}>: pkg_lwt.syntax
+<example/*.ml{,i}>: use_grant_table
+<example/*.ml{,i}>: pkg_xenstore
+<example/*.ml{,i}>: pkg_xenstore.client
+<example/*.ml{,i}>: pkg_xenstore_client_unix
+<example/*.ml{,i}>: pkg_lwt
+<example/*.ml{,i}>: pkg_lwt.unix
+<example/*.ml{,i}>: pkg_bitstring
+<example/*.ml{,i}>: pkg_bitstring.syntax
+<example/*.ml{,i}>: pkg_lwt.syntax
+<example/xs_jonstest.{native,byte,nobj.o}>: custom
+# OASIS_STOP
+true: annot
+<*/*>: syntax_camlp4o
+<lib/*>: pkg_lwt.syntax
+<example/*>: pkg_bitstring.syntax, pkg_lwt.syntax
