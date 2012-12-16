@@ -1,27 +1,40 @@
+.PHONY: all clean install build
+all: build doc
 
-default : xs_jonstest
+NAME=grant-table
+J=4
 
-testevtchn_rx : evtchn.cmx activations.cmx testevtchn_rx.cmx 
-	ocamlfind ocamlopt -o testevtchn_rx -package lwt,lwt.unix -linkpkg $^
+export OCAMLRUNPARAM=b
 
-xs_jonstest : gnttab.cmxa vhd.cmx activations.cmx ring.cmx blkif.cmx xs_jonstest.cmx
-	ocamlfind ocamlopt -o xs_jonstest -g -package bigarray,lwt,lwt.unix,cstruct -linkpkg -I ../ocaml-xenstore ../ocaml-xenstore/xs.cmxa $^
+TESTS ?= --enable-tests
+ifneq "$(MIRAGE_OS)" ""
+TESTS := --disable-tests
+endif
 
-gnttab.cmxa : evtchn.cmx gnttab.cmx ring_stubs.o gnttab_stubs.o gnttab.cmi
-	ocamlmklib -g -o gnttab ring_stubs.o gnttab_stubs.o evtchn_stubs.o -L. gnttab.cmx evtchn.cmx
 
-%.o : %.c
-	gcc -c -fPIC -g -o $@ $<
+setup.bin: setup.ml
+	@ocamlopt.opt -o $@ $< || ocamlopt -o $@ $< || ocamlc -o $@ $<
+	@rm -f setup.cmx setup.cmi setup.o setup.cmo
 
-%.cmx : %.ml 
-	ocamlfind ocamlopt -package lwt,lwt.syntax -I ../ocaml-xenstore -syntax camlp4o -g -annot -c $<
+setup.data: setup.bin
+	@./setup.bin -configure $(TESTS)
 
-%.cmi : %.mli
-	ocamlfind ocamlopt -package lwt,lwt.syntax -I ../ocaml-xenstore -syntax camlp4o -c $^
+build: setup.data setup.bin
+	@./setup.bin -build -j $(J)
 
-.PHONY : clean
-clean :
-	rm -f *.cmx *.cmo *.cmi *.o *.cmxa *.a *.so *.cma test
+doc: setup.data setup.bin
+	@./setup.bin -doc -j $(J)
 
-ring.cmx : ring.cmi
-gnttab.cmx : gnttab.cmi
+install: setup.bin
+	@./setup.bin -install
+
+test: setup.bin build
+	@./setup.bin -test
+
+reinstall: setup.bin
+	@ocamlfind remove $(NAME) || true
+	@./setup.bin -reinstall
+
+clean:
+	@ocamlbuild -clean
+	@rm -f setup.data setup.log setup.bin
