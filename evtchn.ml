@@ -1,5 +1,10 @@
+type t
 
-let init () = assert false
+type domid = int
+
+type port = int
+
+external init: unit -> t = "stub_evtchn_init"
 
 let pending _ = assert false
 
