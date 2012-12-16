@@ -231,14 +231,14 @@ module Backend = struct
 		    let rsp = t.write_res (req.id, {op=req.Req.op; st=OK}) in
 		    let more_to_do, notify = Ring.Back.write_response t.r rsp in
 		    if more_to_do then Activations.wake t.evtchn;
-		    if notify then Xeneventchn.notify Activations.xe t.evtchn;
+		    if notify then Eventchn.notify Activations.xe t.evtchn;
 		    Lwt.return ()
         in ()
 
 	let init xg domid ring_ref evtchn_ref proto ops =
 		let xe = Activations.xe in
-		let fd = Xeneventchn.fd xe in
-		let evtchn = Xeneventchn.bind_interdomain xe domid evtchn_ref in
+		let fd = Eventchn.fd xe in
+		let evtchn = Eventchn.bind_interdomain xe domid evtchn_ref in
 		let domid = Int32.of_int domid in
 		let parse_req, write_res,idx_size = match proto with
 			| X86_64 -> Req.read_request_64, Res.make_response, Req.idx_size_64
@@ -254,7 +254,7 @@ module Backend = struct
 			let rec inner () = 
 				lwt () = Lwt_unix.sleep 5.0 in
 			    Activations.wake evtchn;
-				Xeneventchn.notify Activations.xe evtchn;
+				Eventchn.notify Activations.xe evtchn;
 			    inner ()
 		    in inner ()
 	    in 
