@@ -15,8 +15,8 @@
 
 
 open Lwt
-open Xs_packet
-module Client = Xs_client.Client(Xs_transport_unix)
+open Xs_protocol
+module Client = Xs_client.Client(Xs_transport_unix_client)
 open Client
 
 module BackendSet = Set.Make(struct type t = int * int let compare = compare end)
@@ -158,7 +158,7 @@ let handle_backend client (domid,devid) =
 						       lwt x = read xs (frontend ^ "/state") in
 			                   lwt _ = Lwt_log.error_f ~logger "XXX state=%s" x in
 			                   raise Eagain 
-	                       with Xs_packet.Enoent _ -> 
+	                       with Xs_protocol.Enoent _ -> 
 					           lwt _ = Lwt_log.error_f ~logger "XXX caught enoent while reading frontend state" in
 					           return ()); 
                    in

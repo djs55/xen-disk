@@ -12,4 +12,6 @@ val unmask: t -> port -> unit
 
 val notify: t -> port -> unit
 
-val bind_interdomain: t -> domid -> port -> unit
+val bind_interdomain: t -> domid -> port -> int
+
+val fd_of: t -> Unix.file_descr

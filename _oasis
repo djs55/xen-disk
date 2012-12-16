@@ -1,0 +1,25 @@
+OASISFormat: 0.3
+Name:        ocaml-gnttab
+Version:     0.1.0
+Synopsis:    Bindings for cross-domain memory mapping and event notification under Xen
+Authors:     Jonathan Ludlam, David Scott
+License:     ISC
+Plugins:     META (0.3)
+BuildTools:  ocamlbuild
+
+Library grant_table
+  CompiledObject:     best
+  Path:               lib
+  Findlibname:        grant-table
+  Modules:            Activations, Gnttab, Evtchn
+  BuildDepends:       lwt, lwt.unix, lwt.syntax
+  CSources:           gnttab_stubs.c, evtchn_stubs.c
+  CCLib:              -lxenctrl
+
+Executable xs_jonstest
+  CompiledObject:     best
+  Path:               example
+  MainIs:             xs_jonstest.ml
+  Custom:             true
+  Install:            false
+  BuildDepends:       xenstore, xenstore.client, xenstore_client_unix, grant-table, lwt, lwt.unix, bitstring, bitstring.syntax

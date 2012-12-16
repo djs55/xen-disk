@@ -1,5 +1,5 @@
 
-let xe = Eventchn.init ()
+let xe = Evtchn.init ()
 let nr_events = 1024
 let event_cb = Array.init nr_events (fun _ -> Lwt_sequence.create ())
 
@@ -19,11 +19,11 @@ let wake port =
 (* Go through the event mask and activate any events, potentially spawning
    new threads *)
 let run () =
-	let fd = Lwt_unix.of_unix_file_descr ~blocking:false ~set_flags:true (Eventchn.fd xe) in
+	let fd = Lwt_unix.of_unix_file_descr ~blocking:false ~set_flags:true (Evtchn.fd_of xe) in
 	let rec inner () =
 		lwt () = Lwt_unix.wait_read fd in
-	    let port = Eventchn.pending xe in
+	    let port = Evtchn.pending xe in
 		wake port;
-		Eventchn.unmask xe port;
+		Evtchn.unmask xe port;
         inner ()
    in inner ()

@@ -14,4 +14,12 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <caml/alloc.h>
+#include <caml/memory.h>
 
+CAMLprim value
+stub_evtchn_init(value unit)
+{
+   CAMLparam1(unit);
+   CAMLreturn(Val_unit);
+}

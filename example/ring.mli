@@ -25,18 +25,14 @@ val init_back :
 val destroy_back :
 	xg:Gnttab.handle -> sring -> unit
 
-external sring_rsp_prod : sring -> int = "caml_sring_rsp_prod"
-external sring_req_prod : sring -> int = "caml_sring_req_prod"
-external sring_req_event : sring -> int = "caml_sring_req_event"
-external sring_rsp_event : sring -> int = "caml_sring_rsp_event"
-external sring_push_requests : sring -> int -> unit
-  = "caml_sring_push_requests"
-external sring_push_responses : sring -> int -> unit
-  = "caml_sring_push_responses"
-external sring_set_rsp_event : sring -> int -> unit
-  = "caml_sring_set_rsp_event"
-external sring_set_req_event : sring -> int -> unit
-  = "caml_sring_set_req_event"
+val sring_rsp_prod : sring -> int
+val sring_req_prod : sring -> int
+val sring_req_event : sring -> int
+val sring_rsp_event : sring -> int
+val sring_push_requests : sring -> int -> unit
+val sring_push_responses : sring -> int -> unit
+val sring_set_rsp_event : sring -> int -> unit
+val sring_set_req_event : sring -> int -> unit
 val nr_ents : sring -> int
 val slot : sring -> int -> Gnttab.t * int * int
 

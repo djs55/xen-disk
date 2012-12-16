@@ -49,14 +49,15 @@ let init_back ~xg ~domid ~gref ~idx_size ~name =
 let destroy_back ~xg t =
 	Gnttab.unmap xg t.buf
 
-external sring_rsp_prod: sring -> int = "caml_sring_rsp_prod"
-external sring_req_prod: sring -> int = "caml_sring_req_prod" 
-external sring_req_event: sring -> int = "caml_sring_req_event"
-external sring_rsp_event: sring -> int = "caml_sring_rsp_event"
-external sring_push_requests: sring -> int -> unit = "caml_sring_push_requests"
-external sring_push_responses: sring -> int -> unit = "caml_sring_push_responses" 
-external sring_set_rsp_event: sring -> int -> unit = "caml_sring_set_rsp_event"
-external sring_set_req_event: sring -> int -> unit = "caml_sring_set_req_event"
+
+let sring_rsp_prod _ = assert false
+let sring_req_prod _ = assert false
+let sring_req_event _ = assert false
+let sring_rsp_event _ = assert false
+let sring_push_requests _ _ = assert false
+let sring_push_responses _ _ = assert false
+let sring_set_rsp_event _ _ = assert false
+let sring_set_req_event _ _ = assert false
 
 let nr_ents sring = sring.nr_ents
 

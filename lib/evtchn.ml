@@ -13,3 +13,5 @@ let unmask _ _ = assert false
 let notify _ _ = assert false
 
 let bind_interdomain _ _ _ = assert false
+
+let fd_of _ = assert false
