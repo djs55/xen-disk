@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 74f2a0b82d4a2a584c1d49e8d7713b24)
+# DO NOT EDIT (digest: c998277d8836773cde0f2d92e6116a3c)
 # Ignore VCS directories, you can use the same kind of rule outside 
 # OASIS_START/STOP if you want to exclude directories that contains 
 # useless stuff for the build process
@@ -30,6 +30,8 @@
 <example/xs_jonstest.{native,byte,nobj.o}>: pkg_bitstring
 <example/xs_jonstest.{native,byte,nobj.o}>: pkg_bitstring.syntax
 <example/xs_jonstest.{native,byte,nobj.o}>: pkg_vhd
+<example/xs_jonstest.{native,byte,nobj.o}>: pkg_xenblock
+<example/xs_jonstest.{native,byte,nobj.o}>: pkg_xenblock.back
 <example/xs_jonstest.{native,byte,nobj.o}>: pkg_lwt.syntax
 <example/xs_jonstest.{native,byte,nobj.o}>: pkg_xenctrl
 <example/*.ml{,i}>: use_grant_table
@@ -41,6 +43,8 @@
 <example/*.ml{,i}>: pkg_bitstring
 <example/*.ml{,i}>: pkg_bitstring.syntax
 <example/*.ml{,i}>: pkg_vhd
+<example/*.ml{,i}>: pkg_xenblock
+<example/*.ml{,i}>: pkg_xenblock.back
 <example/*.ml{,i}>: pkg_lwt.syntax
 <example/*.ml{,i}>: pkg_xenctrl
 "example/blit_stubs.c": use_grant_table
@@ -52,10 +56,11 @@
 "example/blit_stubs.c": pkg_bitstring
 "example/blit_stubs.c": pkg_bitstring.syntax
 "example/blit_stubs.c": pkg_vhd
+"example/blit_stubs.c": pkg_xenblock
+"example/blit_stubs.c": pkg_xenblock.back
 "example/blit_stubs.c": pkg_lwt.syntax
 "example/blit_stubs.c": pkg_xenctrl
 <example/xs_jonstest.{native,byte,nobj.o}>: custom
 # OASIS_STOP
 true: annot
-<*/*>: syntax_camlp4o
-<example/*>: pkg_bitstring.syntax, pkg_lwt.syntax
+<*/*>: syntax_camlp4o, pkg_lwt.syntax, pkg_cstruct.syntax

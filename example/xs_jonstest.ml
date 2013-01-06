@@ -15,6 +15,7 @@
 
 
 open Lwt
+open Blkback
 open Xs_protocol
 module Client = Xs_client.Client(Xs_transport_lwt_unix_client)
 open Client
@@ -27,6 +28,7 @@ let logger = Lwt_log.channel ~close_mode:`Keep ~channel:Lwt_io.stdout ()
 let backends = ref BackendSet.empty
 
 let xg = Gnttab.interface_open ()
+let xe = Eventchn.init ()
 
 let empty_sector = String.make 512 '\000'
 
@@ -92,12 +94,7 @@ let mk_backend_path (domid,devid) subpath =
 let string_of_segs segs = 
 	Printf.sprintf "[%s]" (
 	String.concat "," (List.map (fun seg ->
-		Printf.sprintf "{gref=%ld first=%d last=%d}" seg.Blkif.Req.gref seg.Blkif.Req.first_sector seg.Blkif.Req.last_sector) (Array.to_list segs)))
-
-let string_of_req req =
-	Printf.sprintf "op=%s\nhandle=%d\nid=%Ld\nsector=%Ld\nsegs=%s\n" (Blkif.Req.string_of_op req.Blkif.Req.op) req.Blkif.Req.handle
-		req.Blkif.Req.id req.Blkif.Req.sector (string_of_segs req.Blkif.Req.segs)
-
+		Printf.sprintf "{gref=%ld first=%d last=%d}" seg.Blkproto.Req.gref seg.Blkproto.Req.first_sector seg.Blkproto.Req.last_sector) (Array.to_list segs)))
 
 let handle_backend client (domid,devid) =
 	(* Tell xapi we've noticed the backend *)
@@ -141,15 +138,15 @@ let handle_backend client (domid,devid) =
      
            lwt () = Lwt_log.error_f ~logger "Got ring-ref=%ld evtchn=%d protocol=%s\n" ring_ref evtchn protocol in
            let proto = match protocol with
-			   | "x86_32-abi" -> Blkif.X86_32
-			   | "x86_64-abi" -> Blkif.X86_64
-			   | "native" -> Blkif.Native
+			   | "x86_32-abi" -> Blkproto.X86_32
+			   | "x86_64-abi" -> Blkproto.X86_64
+			   | "native" -> Blkproto.Native
 		   in
 
            begin if not !handled then 
-			   let be_thread = Blkif.Backend.init xg domid ring_ref evtchn proto {
-				   Blkif.Backend.read = do_read_vhd vhd;
-				   Blkif.Backend.write = do_write_vhd vhd } in
+			   let be_thread = Blkback.init xg xe domid ring_ref evtchn proto Activations.wait {
+				   Blkback.read = do_read_vhd vhd;
+				   Blkback.write = do_write_vhd vhd } in
 			   ignore(with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "state") "4"));
 			   let waiter = 
 				   lwt () = wait client 

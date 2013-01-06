@@ -5,7 +5,7 @@ let event_cb = Array.init nr_events (fun _ -> Lwt_sequence.create ())
 
 let wait port =
   let th, u = Lwt.task () in
-  let node = Lwt_sequence.add_r u event_cb.(port) in
+  let node = Lwt_sequence.add_r u event_cb.(Eventchn.to_int port) in
   Lwt.on_cancel th (fun _ -> Lwt_sequence.remove node);
   th
 
@@ -23,7 +23,7 @@ let run () =
 	let rec inner () =
 		lwt () = Lwt_unix.wait_read fd in
 	    let port = Eventchn.pending xe in
-		wake port;
+		wake (Eventchn.to_int port);
 		Eventchn.unmask xe port;
         inner ()
    in inner ()
