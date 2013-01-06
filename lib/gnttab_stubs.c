@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2012-2013 Citrix Inc
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; version 2.1 only. with the special
+ * exception on linking described in file LICENSE.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ */
+
 #include <stdlib.h>
 #include <errno.h>
 
@@ -42,26 +56,86 @@ CAMLprim value stub_xc_gnttab_close(value xgh)
 	CAMLreturn(Val_unit);
 }
 
-CAMLprim value stub_xc_gnttab_map_grant_ref(value xgh, value domid, value ref, value prot)
+CAMLprim value stub_xc_gnttab_get_perm(value perm)
 {
-	CAMLparam4(xgh, domid, ref, prot);
-	uint32_t c_domid = Int32_val(domid);
-	uint32_t c_ref = Int32_val(ref);
-	int c_flags = Int_val(prot);
+	CAMLparam1(perm);
+	int result;
+	switch (Int_val(perm)){
+	case 0:
+		result = PROT_READ;
+		break;
+	case 1:
+		result = PROT_WRITE;
+		break;
+	default:
+		result = PROT_NONE;
+		break;
+	}
+	CAMLreturn(Val_int(result));
+}
 
-	void *map = xc_gnttab_map_grant_ref(_G(xgh), c_domid, c_ref, c_flags);
+#define XC_GNTTAB_BIGARRAY (CAML_BA_UINT8 | CAML_BA_C_LAYOUT | CAML_BA_EXTERNAL)
+
+CAMLprim value stub_xc_gnttab_map_grant_ref(
+	value xgh,
+	value domid,
+	value reference,
+	value perms
+	)
+{
+	CAMLparam4(xgh, domid, reference, perms);
+	CAMLlocal1(contents);
+	uint32_t c_domid, c_reference;
+	int c_perm;
+
+	c_domid = Int32_val(domid);
+	c_reference = Int32_val(reference);
+	c_perm = Int_val(perms);
+
+	void *map = xc_gnttab_map_grant_ref(_G(xgh),
+		c_domid, c_reference, c_perm);
 
 	if(map==NULL) {
 		caml_failwith("Failed to map grant ref");
 	}
 
-	CAMLreturn(caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT | CAML_BA_EXTERNAL, 1, map, 1 << XC_PAGE_SHIFT));
+	contents = caml_ba_alloc_dims(XC_GNTTAB_BIGARRAY, 1,
+		map, 1 << XC_PAGE_SHIFT);
+	CAMLreturn(contents);
 }
 
-CAMLprim value stub_xc_gnttab_map_grant_refs(value xgh, value refs_and_domids, value prot)
+CAMLprim value stub_xc_gnttab_map_grant_refs(
+	value xgh,
+	value array,
+	value perms)
 {
-	CAMLparam3(xgh, refs_and_domids, prot);
-	CAMLreturn(Val_unit);
+	CAMLparam3(xgh, array, perms);
+	CAMLlocal3(domid, reference, contents);
+	int c_perms = Int_val(perms);
+	int count = Wosize_val(array) / 2;
+	uint32_t domids[count];
+	uint32_t refs[count];
+	int i;
+
+	for (i = 0; i < count; i++){
+		domids[i] = Int32_val(Field(array, i * 2 + 0));
+		refs[i] = Int32_val(Field(array, i * 2 + 1));
+	}
+	void *map = xc_gnttab_map_grant_refs(
+		_G(xgh),
+		count,
+		domids,
+		refs,
+		c_perms
+	);
+
+	if(map==NULL) {
+		caml_failwith("Failed to map grant ref");
+	}
+
+	contents = caml_ba_alloc_dims(XC_GNTTAB_BIGARRAY, 1,
+		map, 1 << XC_PAGE_SHIFT);
+	CAMLreturn(contents);
 }
 
 CAMLprim value stub_xc_gnttab_unmap(value xgh, value array) 
@@ -75,49 +149,5 @@ CAMLprim value stub_xc_gnttab_unmap(value xgh, value array)
 		caml_failwith("Failed to unmap grant");
 	}
 
-	CAMLreturn(Val_unit);
-}
-
-/* Blit from a string to a page */
-CAMLprim value stub_xc_gnttab_string_blit(value src, value srcoff, value dst, value dstoff, value len)
-{
-	CAMLparam5(src,srcoff,dst,dstoff,len);
-
-	if(Int_val(dstoff)+Int_val(len) > PAGE_SIZE) {
-		caml_failwith("xxBlit exceeds page boundary");
-	}
-	
-	if(caml_string_length(src) - Int_val(srcoff) > Int_val(len)) {
-		caml_failwith("Blit overruns end of string");
-	}
-
-	char *str = String_val(src);
-	char *page = Caml_ba_data_val(dst);
-
-	memcpy(page+Int_val(dstoff),str+Int_val(srcoff),Int_val(len));
-	
-	CAMLreturn(Val_unit);
-}
-
-/* Blit from a page to a string */
-CAMLprim value stub_xc_gnttab_ring_blit(value src, value srcoff, value dst, value dstoff, value len)
-{
-	CAMLparam5(src,srcoff,dst,dstoff,len);
-
-	if(Int_val(srcoff)+Int_val(len) > PAGE_SIZE) {
-		caml_failwith("Blit exceeds page boundary");
-	}
-	
-	if(caml_string_length(dst) - Int_val(dstoff) > Int_val(len)) {
-		caml_failwith("Blit overruns end of string");
-	}
-
-	char *str = String_val(dst);
-	char *page = Caml_ba_data_val(src);
-
-	memcpy(str+Int_val(dstoff),
-		   page+Int_val(srcoff),
-		   Int_val(len));
-	
 	CAMLreturn(Val_unit);
 }

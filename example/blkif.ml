@@ -90,7 +90,7 @@ module Req = struct
       op:8:littleendian; nr_segs:8:littleendian;
       req.handle:16:littleendian; 0l:32; req.id:64:littleendian;
       req.sector:64:littleendian; segs:-1:bitstring } in
-    Gnttab.strblit reqbuf 0 bs bsoff (reqlen/8);
+    Blit.strblit reqbuf 0 bs bsoff (reqlen/8);
     req.id
 
   let write_request_32 req (bs,bsoff,bslen) =
@@ -101,7 +101,7 @@ module Req = struct
       op:8:littleendian; nr_segs:8:littleendian;
       req.handle:16:littleendian; req.id:64:littleendian;
       req.sector:64:littleendian; segs:-1:bitstring } in
-    Gnttab.strblit reqbuf 0 bs bsoff (reqlen/8);
+    Blit.strblit reqbuf 0 bs bsoff (reqlen/8);
     req.id
 
   (* Read a request out of a bitstring; to be used by the Ring.Back for serving
@@ -187,8 +187,8 @@ end
 
 module Backend = struct
 	type ops = {
-		read : Gnttab.t -> int64 -> int -> int -> unit Lwt.t;
-		write : Gnttab.t -> int64 -> int -> int -> unit Lwt.t;
+		read : Gnttab.contents -> int64 -> int -> int -> unit Lwt.t;
+		write : Gnttab.contents -> int64 -> int -> int -> unit Lwt.t;
 	}
 
 	type t = {
@@ -212,15 +212,15 @@ module Backend = struct
 
 	let process t (slot, from, len) =
 		let open Req in
-		let req = t.parse_req (Bitstring.bitstring_of_string (Gnttab.read slot from len)) in
+		let req = t.parse_req (Bitstring.bitstring_of_string (Blit.read slot from len)) in
 		let fn = match req.op with
 			| Read -> t.ops.read
 			| Write -> t.ops.write
 		in
 		let (_,threads) = List.fold_left (fun (off,threads) seg ->
 			let sector = Int64.add req.sector (Int64.of_int off) in
-			let prot = match req.op with | Read -> 3 | Write -> 1 in
-			let thread = Gnttab.with_ref t.xg t.domid seg.gref prot (fun buf ->
+			let prot = match req.op with | Read -> [ Gnttab.READ ] | Write -> [ Gnttab.WRITE ] in
+			let thread = Blit.with_ref t.xg t.domid seg.gref prot (fun buf ->
 				fn buf sector seg.first_sector seg.last_sector) in 
 			let newoff = off + (seg.last_sector - seg.first_sector + 1) in
 			(newoff,thread::threads)) (0, []) (Array.to_list req.segs) 

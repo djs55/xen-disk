@@ -34,7 +34,7 @@ val sring_push_responses : sring -> int -> unit
 val sring_set_rsp_event : sring -> int -> unit
 val sring_set_req_event : sring -> int -> unit
 val nr_ents : sring -> int
-val slot : sring -> int -> Gnttab.t * int * int
+val slot : sring -> int -> Gnttab.contents * int * int
 
 
 (** The front-end of the shared ring, which issues requests and reads
@@ -55,7 +55,7 @@ module Front : sig
     * a Bitstring.
     * @param idx Index to retrieve, should be less than nr_ents
     *)
-  val slot : ('a,'b) t -> int -> Gnttab.t * int * int
+  val slot : ('a,'b) t -> int -> Gnttab.contents * int * int
 
   (** Retrieve number of slots in the shared ring *)
   val nr_ents : ('a,'b) t -> int
@@ -76,7 +76,7 @@ module Front : sig
     * the responses and wake up any sleeping threads that were
     * waiting for that particular response.
     *)
-  val ack_responses : ('a,'b) t -> (Gnttab.t * int * int -> unit) -> unit
+  val ack_responses : ('a,'b) t -> (Gnttab.contents * int * int -> unit) -> unit
 
   (** Update the shared request producer *)
   val push_requests : ('a,'b) t -> unit
@@ -95,12 +95,12 @@ module Front : sig
       @param fn Function that writes to a request slot and returns the request id
       @return Thread which returns the response value to the input request
     *)
-  val push_request_and_wait : ('a,'b) t -> (Gnttab.t * int * int -> 'b) -> 'a Lwt.t
+  val push_request_and_wait : ('a,'b) t -> (Gnttab.contents * int * int -> 'b) -> 'a Lwt.t
 
   (** Poll the ring for responses, and wake up any threads that are
       sleeping (as a result of calling {[push_request_and_wait]}).
     *)
-  val poll : ('a,'b) t -> (Gnttab.t * int * int -> ('b * 'a)) -> unit
+  val poll : ('a,'b) t -> (Gnttab.contents * int * int -> ('b * 'a)) -> unit
 end
 
 module Back : sig
@@ -117,7 +117,7 @@ module Back : sig
     * a Bitstring.
     * @param idx Index to retrieve, should be less than nr_ents
     *)
-  val slot :  t -> int -> Gnttab.t * int * int
+  val slot :  t -> int -> Gnttab.contents * int * int
 
   (** Retrieve number of slots in the shared ring *)
   val nr_ents :  t -> int
@@ -125,7 +125,7 @@ module Back : sig
   (** Advance the response producer and return the latest slot id *)
   val next_res_idx:  t -> int
 
-  val next_slot: t -> Gnttab.t * int * int
+  val next_slot: t -> Gnttab.contents * int * int
   (** Update the shared response producer *)
   val push_responses :  t -> unit
 
@@ -140,6 +140,6 @@ module Back : sig
 
   val write_response : t -> string -> bool * bool
 
-  val service_thread : t -> int -> (Gnttab.t * int * int -> unit) -> unit Lwt.t
+  val service_thread : t -> int -> (Gnttab.contents * int * int -> unit) -> unit Lwt.t
 end
 

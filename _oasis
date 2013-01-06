@@ -22,4 +22,5 @@ Executable xs_jonstest
   MainIs:             xs_jonstest.ml
   Custom:             true
   Install:            false
-  BuildDepends:       xenstore, xenstore.client, xenstore_client_unix, grant-table, lwt, lwt.unix, bitstring, bitstring.syntax
+  CSources:           blit_stubs.c
+  BuildDepends:       xenstore, xenstore.client, xenstore_transport.lwt, grant-table, lwt, lwt.unix, bitstring, bitstring.syntax

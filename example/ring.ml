@@ -27,7 +27,8 @@ open Printf
 *)
 
 type sring = {
-  buf: Gnttab.t;    (* Overall I/O buffer *)
+  mapping: Gnttab.mapping;
+  buf: Gnttab.contents;    (* Overall I/O buffer *)
   header_size: int; (* Header of shared ring variables, in bytes *)
   idx_size: int;    (* Size in bytes of an index slot *)
   nr_ents: int;     (* Number of index entries *)
@@ -35,7 +36,10 @@ type sring = {
 }
 
 let init_back ~xg ~domid ~gref ~idx_size ~name =
-  let buf = Gnttab.map_grant_ref xg domid gref 3 in
+  match Gnttab.(map xg { domid; reference = gref } [ Gnttab.WRITE ]) with
+  | None -> failwith "init_back"
+  | Some mapping ->
+  let buf = Gnttab.contents mapping in
   let header_size = 4+4+4+4+(6*8) in (* header bits size of struct sring *)
   (* Round down to the nearest power of 2, so we can mask indices easily *)
   let round_down_to_nearest_2 x =
@@ -44,10 +48,10 @@ let init_back ~xg ~domid ~gref ~idx_size ~name =
   let free_bytes = 4096 - header_size in
   let nr_ents = round_down_to_nearest_2 (free_bytes / idx_size) in
   (* We store idx_size in bits, for easier Bitstring offset calculations *)
-  { name; buf; idx_size; nr_ents; header_size } 
+  { name; mapping; buf; idx_size; nr_ents; header_size } 
 
 let destroy_back ~xg t =
-	Gnttab.unmap xg t.buf
+	Gnttab.unmap_exn xg t.mapping
 
 
 let sring_rsp_prod _ = assert false
@@ -240,7 +244,7 @@ module Back = struct
   let write_response t rsp =
 	  let (bs,bsoff,bslen) = next_slot t in
 	  let rsplen = String.length rsp in
-      Gnttab.strblit rsp 0 bs bsoff rsplen;
+      Blit.strblit rsp 0 bs bsoff rsplen;
 	  let notify = push_responses_and_check_notify t in
 	  let more_to_do = more_to_do t in
 	  (more_to_do, notify)

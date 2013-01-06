@@ -16,7 +16,7 @@
 
 open Lwt
 open Xs_protocol
-module Client = Xs_client.Client(Xs_transport_unix_client)
+module Client = Xs_client.Client(Xs_transport_lwt_unix_client)
 open Client
 
 module BackendSet = Set.Make(struct type t = int * int let compare = compare end)

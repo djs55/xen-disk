@@ -1,17 +1,94 @@
+(*
+ * Copyright (C) 2012-2013 Citrix Inc
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; version 2.1 only. with the special
+ * exception on linking described in file LICENSE.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *)
+
+(** Allow a user-space program running on Linux/xen to read/write
+    memory exported ("granted") from foreign domains. Safe memory
+    sharing is a building block of all xen inter-domain communication
+    protocols such as those for virtual network and disk devices.
+
+    Foreign domains will explicitly "grant" us access to certain memory
+    regions such as disk buffers. These regions are uniquely identified
+    by the pair of (foreign domain id, integer reference) which is
+    passed to us over some existing channel (typically via xenstore keys
+    or via structures in previously-shared memory region).
+
+    A xen-aware kernel will use hypercalls to cause xen to map the
+    foreign memory. In Linux userspace we must open a connection to the
+    "grant device driver" to request the kernel ask xen to map foreign memory
+    regions into our address space. Once mapped, we can access the raw
+    memory contents as a Bigarray. In the case of a disk buffer, we will
+    fill the buffers with disk blocks, unmap the page and then signal
+    the foreign domain that we're finished, normally via an event channel.
+*) 
+
+(** {0 Low-level, unsafe API}
+    This is a one-to-one mapping of the underlying C functions. *)
+
 type handle
-external interface_open : unit -> handle = "stub_xc_gnttab_open"
-external interface_close : handle -> unit = "stub_xc_gnttab_close"
-type t = Lwt_bytes.t
-external map_grant_ref : handle -> int32 -> int32 -> int -> t
-  = "stub_xc_gnttab_map_grant_ref"
-external unmap : handle -> t -> unit = "stub_xc_gnttab_unmap"
-external strblit : string -> int -> t -> int -> int -> unit
-  = "stub_xc_gnttab_string_blit"
-external ringblit : t -> int -> string -> int -> int -> unit
-  = "stub_xc_gnttab_ring_blit"
+(** A connection to the grant device, needed for mapping/unmapping *)
 
-val with_ref :
-  handle -> int32 -> int32 -> int -> (t -> 'a Lwt.t) -> 'a Lwt.t
+val interface_open: unit -> handle
+(** Open a connection to the grant device. This must be done before any
+    calls to map or unmap. *)
 
-val read : t -> int -> int -> string
-val write : t -> int -> string -> unit
+val interface_close: handle -> unit
+(** Close a connection to the grant device. Any future calls to map or
+    unmap will fail. *)
+
+type grant = {
+    domid: int32;     (** foreign domain who is exporting memory *)
+    reference: int32; (** id which identifies the specific export in the foreign domain *)
+}
+(** A foreign domain must explicitly "grant" us memory and send us the
+    "reference". The pair of (foreign domain id, reference) uniquely
+    identifies the block of memory. This pair ("grant") is transmitted
+    to us out-of-band, usually either via xenstore during device setup or
+    via a shared memory ring structure. *)
+
+type mapping
+(** A memory region associated with one or more mapped grant reference *)
+
+type permission =
+| READ   (** contents may be read *)
+| WRITE  (** contents may be written *)
+(** Permissions associated with each mapping. *)
+
+val map: handle -> grant -> permission list -> mapping option
+(** Create a single mapping from a grant using a given list of permissions.
+    On error this function returns None. Diagnostic details will be logged. *) 
+
+val mapv: handle -> grant list -> permission list -> mapping option
+(** Create a single contiguous mapping from a list of grants using a common
+    list of permissions. Note the grant list can involve grants from multiple
+    domains. On error this function returns None. Diagnostic details will
+    be logged. *)
+
+val unmap_exn: handle -> mapping -> unit
+(** Unmap a single mapping (which may involve multiple grants) *)
+
+type contents = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
+(** Raw mapped memory *)
+
+val contents: mapping -> contents
+(** Expose the contents of a mapped memory region as a bigarray *)
+
+(* {0 High-level, safe API} *)
+
+val with_map: handle -> grant -> permission list -> (contents -> 'a) -> 'a option
+(** Maps a grant and applies the resulting memory contents to a given function. *)
+
+val with_mapv: handle -> grant list -> permission list -> (contents -> 'a) -> 'a option
+(** Maps a list of grants and applies the resulting contiguous memory contents to a
+    given function. *)
+
