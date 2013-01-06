@@ -1,9 +1,9 @@
 # OASIS_START
-# DO NOT EDIT (digest: 7119c232865eef5c7e897bdb0d7dbbdf)
+# DO NOT EDIT (digest: e1e260b6d0969a7238bcbafa29baa0e4)
 version = "0.1.0"
 description =
 "Bindings for cross-domain memory mapping and event notification under Xen"
-requires = "lwt lwt.unix lwt.syntax"
+requires = "lwt lwt.unix lwt.syntax xenctrl"
 archive(byte) = "grant_table.cma"
 archive(byte, plugin) = "grant_table.cma"
 archive(native) = "grant_table.cmxa"
