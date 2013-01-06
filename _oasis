@@ -1,24 +1,17 @@
 OASISFormat: 0.3
-Name:        ocaml-gnttab
+Name:        vhddisk
 Version:     0.1.0
-Synopsis:    Bindings for cross-domain memory mapping and event notification under Xen
+Synopsis:    Xen virtual disk backend which understands .vhd format
 Authors:     Jonathan Ludlam, David Scott
 License:     ISC
 Plugins:     META (0.3)
 BuildTools:  ocamlbuild
 
-Library grant_table
+Executable vhddisk
   CompiledObject:     best
-  Path:               lib
-  Findlibname:        grant-table
-  Modules:            Activations
-  BuildDepends:       lwt, lwt.unix, lwt.syntax, xenctrl
-
-Executable xs_jonstest
-  CompiledObject:     best
-  Path:               example
+  Path:               src
   MainIs:             xs_jonstest.ml
   Custom:             true
   Install:            false
   CSources:           blit_stubs.c
-  BuildDepends:       xenstore, xenstore.client, xenstore_transport.lwt, grant-table, lwt, lwt.unix, bitstring, bitstring.syntax, vhd, xenblock, xenblock.back
+  BuildDepends:       xenstore, xenstore.client, xenstore_transport.lwt, lwt, lwt.unix, bitstring, bitstring.syntax, vhd, xenblock, xenblock.back

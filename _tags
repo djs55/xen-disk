@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: c998277d8836773cde0f2d92e6116a3c)
+# DO NOT EDIT (digest: b42dc458061f623bec9316cd49e64abf)
 # Ignore VCS directories, you can use the same kind of rule outside 
 # OASIS_START/STOP if you want to exclude directories that contains 
 # useless stuff for the build process
@@ -13,54 +13,39 @@
 ".git": not_hygienic
 "_darcs": -traverse
 "_darcs": not_hygienic
-# Library grant_table
-"lib/grant_table.cmxs": use_grant_table
-<lib/*.ml{,i}>: pkg_lwt
-<lib/*.ml{,i}>: pkg_lwt.unix
-<lib/*.ml{,i}>: pkg_lwt.syntax
-<lib/*.ml{,i}>: pkg_xenctrl
-# Executable xs_jonstest
-<example/xs_jonstest.{native,byte,nobj.o}>: use_libxs_jonstest_stubs
-<example/xs_jonstest.{native,byte,nobj.o}>: use_grant_table
-<example/xs_jonstest.{native,byte,nobj.o}>: pkg_xenstore
-<example/xs_jonstest.{native,byte,nobj.o}>: pkg_xenstore.client
-<example/xs_jonstest.{native,byte,nobj.o}>: pkg_xenstore_transport.lwt
-<example/xs_jonstest.{native,byte,nobj.o}>: pkg_lwt
-<example/xs_jonstest.{native,byte,nobj.o}>: pkg_lwt.unix
-<example/xs_jonstest.{native,byte,nobj.o}>: pkg_bitstring
-<example/xs_jonstest.{native,byte,nobj.o}>: pkg_bitstring.syntax
-<example/xs_jonstest.{native,byte,nobj.o}>: pkg_vhd
-<example/xs_jonstest.{native,byte,nobj.o}>: pkg_xenblock
-<example/xs_jonstest.{native,byte,nobj.o}>: pkg_xenblock.back
-<example/xs_jonstest.{native,byte,nobj.o}>: pkg_lwt.syntax
-<example/xs_jonstest.{native,byte,nobj.o}>: pkg_xenctrl
-<example/*.ml{,i}>: use_grant_table
-<example/*.ml{,i}>: pkg_xenstore
-<example/*.ml{,i}>: pkg_xenstore.client
-<example/*.ml{,i}>: pkg_xenstore_transport.lwt
-<example/*.ml{,i}>: pkg_lwt
-<example/*.ml{,i}>: pkg_lwt.unix
-<example/*.ml{,i}>: pkg_bitstring
-<example/*.ml{,i}>: pkg_bitstring.syntax
-<example/*.ml{,i}>: pkg_vhd
-<example/*.ml{,i}>: pkg_xenblock
-<example/*.ml{,i}>: pkg_xenblock.back
-<example/*.ml{,i}>: pkg_lwt.syntax
-<example/*.ml{,i}>: pkg_xenctrl
-"example/blit_stubs.c": use_grant_table
-"example/blit_stubs.c": pkg_xenstore
-"example/blit_stubs.c": pkg_xenstore.client
-"example/blit_stubs.c": pkg_xenstore_transport.lwt
-"example/blit_stubs.c": pkg_lwt
-"example/blit_stubs.c": pkg_lwt.unix
-"example/blit_stubs.c": pkg_bitstring
-"example/blit_stubs.c": pkg_bitstring.syntax
-"example/blit_stubs.c": pkg_vhd
-"example/blit_stubs.c": pkg_xenblock
-"example/blit_stubs.c": pkg_xenblock.back
-"example/blit_stubs.c": pkg_lwt.syntax
-"example/blit_stubs.c": pkg_xenctrl
-<example/xs_jonstest.{native,byte,nobj.o}>: custom
+# Executable vhddisk
+<src/xs_jonstest.{native,byte,nobj.o}>: use_libvhddisk_stubs
+<src/xs_jonstest.{native,byte,nobj.o}>: pkg_xenstore
+<src/xs_jonstest.{native,byte,nobj.o}>: pkg_xenstore.client
+<src/xs_jonstest.{native,byte,nobj.o}>: pkg_xenstore_transport.lwt
+<src/xs_jonstest.{native,byte,nobj.o}>: pkg_lwt
+<src/xs_jonstest.{native,byte,nobj.o}>: pkg_lwt.unix
+<src/xs_jonstest.{native,byte,nobj.o}>: pkg_bitstring
+<src/xs_jonstest.{native,byte,nobj.o}>: pkg_bitstring.syntax
+<src/xs_jonstest.{native,byte,nobj.o}>: pkg_vhd
+<src/xs_jonstest.{native,byte,nobj.o}>: pkg_xenblock
+<src/xs_jonstest.{native,byte,nobj.o}>: pkg_xenblock.back
+<src/*.ml{,i}>: pkg_xenstore
+<src/*.ml{,i}>: pkg_xenstore.client
+<src/*.ml{,i}>: pkg_xenstore_transport.lwt
+<src/*.ml{,i}>: pkg_lwt
+<src/*.ml{,i}>: pkg_lwt.unix
+<src/*.ml{,i}>: pkg_bitstring
+<src/*.ml{,i}>: pkg_bitstring.syntax
+<src/*.ml{,i}>: pkg_vhd
+<src/*.ml{,i}>: pkg_xenblock
+<src/*.ml{,i}>: pkg_xenblock.back
+"src/blit_stubs.c": pkg_xenstore
+"src/blit_stubs.c": pkg_xenstore.client
+"src/blit_stubs.c": pkg_xenstore_transport.lwt
+"src/blit_stubs.c": pkg_lwt
+"src/blit_stubs.c": pkg_lwt.unix
+"src/blit_stubs.c": pkg_bitstring
+"src/blit_stubs.c": pkg_bitstring.syntax
+"src/blit_stubs.c": pkg_vhd
+"src/blit_stubs.c": pkg_xenblock
+"src/blit_stubs.c": pkg_xenblock.back
+<src/xs_jonstest.{native,byte,nobj.o}>: custom
 # OASIS_STOP
 true: annot
 <*/*>: syntax_camlp4o, pkg_lwt.syntax, pkg_cstruct.syntax

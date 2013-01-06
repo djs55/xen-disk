@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: 94f8fd3c5a61b9cc1cca61ef352b7eec) *)
+(* DO NOT EDIT (digest: e508f22bf6fe889d5bb90a32c820a78b) *)
 module OASISGettext = struct
 # 21 "/home/djs/oasis/src/oasis/OASISGettext.ml"
 
@@ -558,10 +558,10 @@ end
 open Ocamlbuild_plugin;;
 let package_default =
   {
-     MyOCamlbuildBase.lib_ocaml = [("grant_table", ["lib"])];
-     lib_c = [("xs_jonstest", "example", [])];
+     MyOCamlbuildBase.lib_ocaml = [];
+     lib_c = [("vhddisk", "src", [])];
      flags = [];
-     includes = [("example", ["lib"])];
+     includes = [];
      }
   ;;
 
