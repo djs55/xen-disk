@@ -4,6 +4,9 @@ all: build doc
 NAME=grant-table
 J=4
 
+BINDIR ?= /usr/bin
+DESTDIR ?= /
+
 export OCAMLRUNPARAM=b
 
 TESTS ?= --enable-tests
@@ -27,6 +30,11 @@ doc: setup.data setup.bin
 
 install: setup.bin
 	@./setup.bin -install
+	install -D ./main.native $(DESTDIR)/$(BINDIR)/vhddisk
+
+uninstall:
+	@ocamlfind remove $(NAME) || true
+	rm -f $(DESTDIR)/$(BINDIR)/vhddisk
 
 test: setup.bin build
 	@./setup.bin -test
