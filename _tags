@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: b5bedc9e0044576711b63c1e8849da78)
+# DO NOT EDIT (digest: 74f2a0b82d4a2a584c1d49e8d7713b24)
 # Ignore VCS directories, you can use the same kind of rule outside 
 # OASIS_START/STOP if you want to exclude directories that contains 
 # useless stuff for the build process
@@ -15,20 +15,10 @@
 "_darcs": not_hygienic
 # Library grant_table
 "lib/grant_table.cmxs": use_grant_table
-<lib/grant_table.{cma,cmxa}>: oasis_library_grant_table_cclib
-"lib/libgrant_table_stubs.lib": oasis_library_grant_table_cclib
-"lib/dllgrant_table_stubs.dll": oasis_library_grant_table_cclib
-"lib/libgrant_table_stubs.a": oasis_library_grant_table_cclib
-"lib/dllgrant_table_stubs.so": oasis_library_grant_table_cclib
-<lib/grant_table.{cma,cmxa}>: use_libgrant_table_stubs
 <lib/*.ml{,i}>: pkg_lwt
 <lib/*.ml{,i}>: pkg_lwt.unix
 <lib/*.ml{,i}>: pkg_lwt.syntax
 <lib/*.ml{,i}>: pkg_xenctrl
-"lib/gnttab_stubs.c": pkg_lwt
-"lib/gnttab_stubs.c": pkg_lwt.unix
-"lib/gnttab_stubs.c": pkg_lwt.syntax
-"lib/gnttab_stubs.c": pkg_xenctrl
 # Executable xs_jonstest
 <example/xs_jonstest.{native,byte,nobj.o}>: use_libxs_jonstest_stubs
 <example/xs_jonstest.{native,byte,nobj.o}>: use_grant_table

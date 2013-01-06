@@ -11,10 +11,8 @@ Library grant_table
   CompiledObject:     best
   Path:               lib
   Findlibname:        grant-table
-  Modules:            Activations, Gnttab
+  Modules:            Activations
   BuildDepends:       lwt, lwt.unix, lwt.syntax, xenctrl
-  CSources:           gnttab_stubs.c
-  CCLib:              -lxenctrl
 
 Executable xs_jonstest
   CompiledObject:     best
