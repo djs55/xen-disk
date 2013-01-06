@@ -68,23 +68,3 @@ let mapv h gs ps =
         Some (mapv_exn h grant_array (int_of_permissions ps))
     with _ ->
         None
-
-let after f g =
-    try
-        let x = f () in
-        g ();
-        x
-    with e ->
-        g ();
-        raise e
-
-let always_unmap_after map_fn h g perms f =
-    match map_fn h g perms with
-    | Some contents ->
-        after
-            (fun () -> Some (f contents))
-            (fun () -> unmap_exn h contents)
-    | None -> None
-
-let with_map h g ps f = always_unmap_after map h g ps f
-let with_mapv h gs ps f = always_unmap_after mapv h gs ps f

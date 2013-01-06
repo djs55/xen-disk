@@ -32,7 +32,7 @@
     the foreign domain that we're finished, normally via an event channel.
 *) 
 
-(** {0 Low-level, unsafe API}
+(** {0 This is a low-level, unsafe API}
     This is a one-to-one mapping of the underlying C functions. *)
 
 type handle
@@ -82,13 +82,4 @@ type contents = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.A
 
 val contents: mapping -> contents
 (** Expose the contents of a mapped memory region as a bigarray *)
-
-(* {0 High-level, safe API} *)
-
-val with_map: handle -> grant -> permission list -> (contents -> 'a) -> 'a option
-(** Maps a grant and applies the resulting memory contents to a given function. *)
-
-val with_mapv: handle -> grant list -> permission list -> (contents -> 'a) -> 'a option
-(** Maps a list of grants and applies the resulting contiguous memory contents to a
-    given function. *)
 
