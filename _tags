@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: b42dc458061f623bec9316cd49e64abf)
+# DO NOT EDIT (digest: 6842e02f4d97e620942bd7e9d4f6fbe8)
 # Ignore VCS directories, you can use the same kind of rule outside 
 # OASIS_START/STOP if you want to exclude directories that contains 
 # useless stuff for the build process
@@ -14,7 +14,6 @@
 "_darcs": -traverse
 "_darcs": not_hygienic
 # Executable vhddisk
-<src/xs_jonstest.{native,byte,nobj.o}>: use_libvhddisk_stubs
 <src/xs_jonstest.{native,byte,nobj.o}>: pkg_xenstore
 <src/xs_jonstest.{native,byte,nobj.o}>: pkg_xenstore.client
 <src/xs_jonstest.{native,byte,nobj.o}>: pkg_xenstore_transport.lwt
@@ -35,16 +34,6 @@
 <src/*.ml{,i}>: pkg_vhd
 <src/*.ml{,i}>: pkg_xenblock
 <src/*.ml{,i}>: pkg_xenblock.back
-"src/blit_stubs.c": pkg_xenstore
-"src/blit_stubs.c": pkg_xenstore.client
-"src/blit_stubs.c": pkg_xenstore_transport.lwt
-"src/blit_stubs.c": pkg_lwt
-"src/blit_stubs.c": pkg_lwt.unix
-"src/blit_stubs.c": pkg_bitstring
-"src/blit_stubs.c": pkg_bitstring.syntax
-"src/blit_stubs.c": pkg_vhd
-"src/blit_stubs.c": pkg_xenblock
-"src/blit_stubs.c": pkg_xenblock.back
 <src/xs_jonstest.{native,byte,nobj.o}>: custom
 # OASIS_STOP
 true: annot

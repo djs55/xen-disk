@@ -13,5 +13,4 @@ Executable vhddisk
   MainIs:             xs_jonstest.ml
   Custom:             true
   Install:            false
-  CSources:           blit_stubs.c
   BuildDepends:       xenstore, xenstore.client, xenstore_transport.lwt, lwt, lwt.unix, bitstring, bitstring.syntax, vhd, xenblock, xenblock.back
