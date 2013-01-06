@@ -10,7 +10,7 @@ BuildTools:  ocamlbuild
 Executable vhddisk
   CompiledObject:     best
   Path:               src
-  MainIs:             xs_jonstest.ml
+  MainIs:             main.ml
   Custom:             true
   Install:            false
-  BuildDepends:       xenstore, xenstore.client, xenstore_transport.lwt, lwt, lwt.unix, bitstring, bitstring.syntax, vhd, xenblock, xenblock.back
+  BuildDepends:       xenstore, xenstore.client, xenstore_transport.lwt, lwt, lwt.unix, vhd, xenblock, xenblock.back
