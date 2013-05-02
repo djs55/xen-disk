@@ -130,13 +130,13 @@ let handle_backend client (domid,devid) =
 	   | "3" ->
 		   lwt () = Lwt_log.error_f ~logger "3 (frontend state=3)\n" in
 		   lwt ring_ref = with_xs client (fun xs -> read xs (frontend ^ "/ring-ref")) in
-           let ring_ref = Int32.of_string ring_ref in
+           let ring_ref = Gnttab.grant_table_index_of_int32 (Int32.of_string ring_ref) in
 	       lwt evtchn = with_xs client (fun xs -> read xs (frontend ^ "/event-channel")) in
            let evtchn = int_of_string evtchn in
 
 		   lwt protocol = try_lwt with_xs client (fun xs -> read xs (frontend ^ "/protocol")) with _ -> return "native" in
      
-           lwt () = Lwt_log.error_f ~logger "Got ring-ref=%ld evtchn=%d protocol=%s\n" ring_ref evtchn protocol in
+           lwt () = Lwt_log.error_f ~logger "Got ring-ref=%s evtchn=%d protocol=%s\n" (Gnttab.string_of_grant_table_index ring_ref) evtchn protocol in
            let proto = match protocol with
 			   | "x86_32-abi" -> Blkproto.X86_32
 			   | "x86_64-abi" -> Blkproto.X86_64
