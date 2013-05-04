@@ -95,9 +95,8 @@ let writev client pairs =
     Lwt_list.iter_s (fun (k, v) -> write xs k v) pairs
   )
 
-let readv client path =
+let readv client path keys =
   with_xs client (fun xs ->
-    lwt keys = directory xs path in
     Lwt_list.map_s (fun k -> lwt v = read xs (path ^ "/" ^ k) in return (k, v)) keys
   )
 
@@ -127,14 +126,15 @@ let handle_backend client (domid,devid) =
     let handled=ref false in
 
     wait client (fun xs ->
-      lwt frontend = readv client frontend_path in
-      let state = List.assoc "state" frontend in
-      match state with
-      | "1"
-      | "2" ->
-        lwt () = Lwt_log.error_f ~logger "state=%s\n" state in
+      lwt frontend = readv client frontend_path
+        (Blkproto.RingInfo.keys @ Blkproto.State.keys) in
+      let open Blkproto.State in
+      match of_assoc_list frontend with
+      | `Error x -> failwith x
+      | `OK Initialising
+      | `OK InitWait ->
         raise Eagain
-      | "3" ->
+      | `OK Initialised ->
         lwt () = Lwt_log.error_f ~logger "3 (frontend state=3)\n" in
         let ring_info = match Blkproto.RingInfo.of_assoc_list frontend with
           | `OK x -> x
@@ -166,8 +166,9 @@ let handle_backend client (domid,devid) =
             ()
         end;
         return ()
-      | "5"
-      | _ ->
+      | `OK Connected
+      | `OK Closing
+      | `OK Closed ->
         return ())
   with e ->
     lwt () = Lwt_log.error_f ~logger "exn: %s" (Printexc.to_string e) in
