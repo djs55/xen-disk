@@ -91,11 +91,6 @@ let do_write mmap buf offset sector_start sector_end =
 let mk_backend_path (domid,devid) subpath = 
 	Printf.sprintf "%s/%d/%d/%s" backend_path domid devid subpath
 
-let string_of_segs segs = 
-	Printf.sprintf "[%s]" (
-	String.concat "," (List.map (fun seg ->
-		Printf.sprintf "{gref=%ld first=%d last=%d}" seg.Blkproto.Req.gref seg.Blkproto.Req.first_sector seg.Blkproto.Req.last_sector) (Array.to_list segs)))
-
 let handle_backend client (domid,devid) =
 	(* Tell xapi we've noticed the backend *)
 	lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "hotplug-status") "online") in
