@@ -95,6 +95,12 @@ let writev client pairs =
     Lwt_list.iter_s (fun (k, v) -> write xs k v) pairs
   )
 
+let readv client path =
+  with_xs client (fun xs ->
+    lwt keys = directory xs path in
+    Lwt_list.map_s (fun k -> lwt v = read xs (path ^ "/" ^ k) in return (k, v)) keys
+  )
+
 let handle_backend client (domid,devid) =
   (* Tell xapi we've noticed the backend *)
   lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "hotplug-status") "online") in
@@ -116,12 +122,13 @@ let handle_backend client (domid,devid) =
                          media = Media.Disk;
                          mode = Mode.ReadWrite }) in
     lwt () = writev client (List.map (fun (k, v) -> mk_backend_path (domid,devid) k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
-    lwt frontend = with_xs client (fun xs -> read xs (mk_backend_path (domid,devid) "frontend")) in
+    lwt frontend_path = with_xs client (fun xs -> read xs (mk_backend_path (domid,devid) "frontend")) in
    
     let handled=ref false in
 
-    wait client (fun xs -> 
-      lwt state = read xs (frontend ^ "/state") in
+    wait client (fun xs ->
+      lwt frontend = readv client frontend_path in
+      let state = List.assoc "state" frontend in
       match state with
       | "1"
       | "2" ->
@@ -129,20 +136,13 @@ let handle_backend client (domid,devid) =
         raise Eagain
       | "3" ->
         lwt () = Lwt_log.error_f ~logger "3 (frontend state=3)\n" in
-        lwt ring_ref = with_xs client (fun xs -> read xs (frontend ^ "/ring-ref")) in
-        let ring_ref = Gnttab.grant_table_index_of_int32 (Int32.of_string ring_ref) in
-        lwt evtchn = with_xs client (fun xs -> read xs (frontend ^ "/event-channel")) in
-        let evtchn = int_of_string evtchn in
-
-        lwt protocol = try_lwt with_xs client (fun xs -> read xs (frontend ^ "/protocol")) with _ -> return "native" in
-     
-        lwt () = Lwt_log.error_f ~logger "Got ring-ref=%s evtchn=%d protocol=%s\n" (Gnttab.string_of_grant_table_index ring_ref) evtchn protocol in
-        let proto = match Blkproto.Protocol.of_string protocol with
+        let ring_info = match Blkproto.RingInfo.of_assoc_list frontend with
           | `OK x -> x
           | `Error x -> failwith x in
-
+     
+        lwt () = Lwt_log.error_f ~logger "%s" (Blkproto.RingInfo.to_string ring_info) in
         begin if not !handled then 
-          let be_thread = Blkback.init xg xe domid ring_ref evtchn proto Activations.wait {
+          let be_thread = Blkback.init xg xe domid ring_info Activations.wait {
             Blkback.read = do_read_vhd vhd;
             Blkback.write = do_write_vhd vhd } in
           ignore(with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "state") "4"));
@@ -150,7 +150,7 @@ let handle_backend client (domid,devid) =
             lwt () = wait client 
               (fun xs -> 
                  try_lwt
-                   lwt x = read xs (frontend ^ "/state") in
+                   lwt x = read xs (frontend_path ^ "/state") in
                    lwt _ = Lwt_log.error_f ~logger "XXX state=%s" x in
                    raise Eagain
                  with Xs_protocol.Enoent _ -> 
