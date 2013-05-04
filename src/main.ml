@@ -137,11 +137,9 @@ let handle_backend client (domid,devid) =
 		   lwt protocol = try_lwt with_xs client (fun xs -> read xs (frontend ^ "/protocol")) with _ -> return "native" in
      
            lwt () = Lwt_log.error_f ~logger "Got ring-ref=%s evtchn=%d protocol=%s\n" (Gnttab.string_of_grant_table_index ring_ref) evtchn protocol in
-           let proto = match protocol with
-			   | "x86_32-abi" -> Blkproto.X86_32
-			   | "x86_64-abi" -> Blkproto.X86_64
-			   | "native" -> Blkproto.Native
-		   in
+           let proto = match Blkproto.Protocol.of_string protocol with
+             | Some x -> x
+             | None -> failwith (Printf.sprintf "Unknown protocol: %s" protocol) in
 
            begin if not !handled then 
 			   let be_thread = Blkback.init xg xe domid ring_ref evtchn proto Activations.wait {
