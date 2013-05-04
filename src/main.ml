@@ -12,8 +12,6 @@
  * GNU Lesser General Public License for more details.
  *)
 
-
-
 open Lwt
 open Blkback
 open Xs_protocol
@@ -34,63 +32,63 @@ let sector_size = 512
 let empty_sector = String.make sector_size '\000'
 
 let do_read_vhd vhd buf offset sector_start sector_end =
-    try_lwt
-		lwt () = for_lwt i=sector_start to sector_end do
-	        let offset = Int64.sub offset (Int64.of_int sector_start) in
-	        let sectornum = Int64.add offset (Int64.of_int i) in
-		    lwt res = Vhd.get_sector_pos vhd sectornum in
-            match res with 
-            | Some (mmap, mmappos) -> 
-				let mmappos = Int64.to_int mmappos in
-                let madvpos = (mmappos / 4096) * 4096 in
-(*			    Lwt_bytes.madvise mmap madvpos 512 Lwt_bytes.MADV_WILLNEED;
-			    lwt () = Lwt_bytes.wait_mincore mmap madvpos in *)
-                Lwt_bytes.unsafe_blit mmap mmappos buf (i*512) 512;
-                Lwt.return ()
-            | None -> 
-				Lwt_bytes.blit_string_bytes empty_sector 0 buf (i*512) 512;
-				Lwt.return ()
-        done in
-        Lwt.return ()
-	with e ->
-		Lwt_log.error_f ~logger "Caught exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end;
-		Lwt.fail e
+  try_lwt
+    lwt () = for_lwt i=sector_start to sector_end do
+    let offset = Int64.sub offset (Int64.of_int sector_start) in
+    let sectornum = Int64.add offset (Int64.of_int i) in
+    lwt res = Vhd.get_sector_pos vhd sectornum in
+    match res with 
+    | Some (mmap, mmappos) -> 
+      let mmappos = Int64.to_int mmappos in
+      let madvpos = (mmappos / 4096) * 4096 in
+      (* Lwt_bytes.madvise mmap madvpos 512 Lwt_bytes.MADV_WILLNEED;
+         lwt () = Lwt_bytes.wait_mincore mmap madvpos in *)
+      Lwt_bytes.unsafe_blit mmap mmappos buf (i*512) 512;
+      Lwt.return ()
+    | None -> 
+      Lwt_bytes.blit_string_bytes empty_sector 0 buf (i*512) 512;
+      Lwt.return ()
+    done in
+    Lwt.return ()
+  with e ->
+    Lwt_log.error_f ~logger "Caught exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end;
+    Lwt.fail e
 
 let do_write_vhd vhd buf offset sector_start sector_end =
-	let sec = String.create 512 in
-	let offset = Int64.sub offset (Int64.of_int sector_start) in
-    try_lwt
-	   lwt () = for_lwt i=sector_start to sector_end do
-			Lwt_bytes.blit_bytes_string buf (i*512) sec 0 512;
-		   Vhd.write_sector vhd (Int64.add offset (Int64.of_int i)) sec
-		done in
-	   Lwt.return ()
-	with e ->
-		Lwt_log.error_f ~logger "Caught exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end;
-		Lwt.fail e
+  let sec = String.create 512 in
+  let offset = Int64.sub offset (Int64.of_int sector_start) in
+  try_lwt
+    lwt () = for_lwt i=sector_start to sector_end do
+      Lwt_bytes.blit_bytes_string buf (i*512) sec 0 512;
+      Vhd.write_sector vhd (Int64.add offset (Int64.of_int i)) sec
+    done in
+    Lwt.return ()
+  with e ->
+    Lwt_log.error_f ~logger "Caught exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end;
+    Lwt.fail e
 
 let do_read mmap buf offset sector_start sector_end =
-	let offset = Int64.to_int offset in
-    try_lwt
-       let len = (sector_end - sector_start + 1) * 512 in
-	   let pos = (offset / 8) * 4096 in
-	   let pos2 = offset * 512 in
-	   Lwt_bytes.madvise mmap pos (len + pos2 - pos) Lwt_bytes.MADV_WILLNEED;
-	   lwt () = Lwt_bytes.wait_mincore mmap pos2 in
-       Lwt_bytes.unsafe_blit mmap pos2 buf (sector_start*512) len;
-       Lwt.return ()
-	with e ->
-		Lwt_log.error_f ~logger "Caught exception: %s, offset=%d sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end;
-		Lwt.fail e
+  let offset = Int64.to_int offset in
+  try_lwt
+    let len = (sector_end - sector_start + 1) * 512 in
+    let pos = (offset / 8) * 4096 in
+    let pos2 = offset * 512 in
+    Lwt_bytes.madvise mmap pos (len + pos2 - pos) Lwt_bytes.MADV_WILLNEED;
+    lwt () = Lwt_bytes.wait_mincore mmap pos2 in
+    Lwt_bytes.unsafe_blit mmap pos2 buf (sector_start*512) len;
+    Lwt.return ()
+  with e ->
+    Lwt_log.error_f ~logger "Caught exception: %s, offset=%d sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end;
+    Lwt.fail e
 
 let do_write mmap buf offset sector_start sector_end =
-	let offset = Int64.to_int offset in
-    let len = (sector_end - sector_start + 1) * 512 in
-	Lwt_bytes.unsafe_blit buf (sector_start * 512) mmap (offset * 512) len;
-	Lwt.return ()
+  let offset = Int64.to_int offset in
+  let len = (sector_end - sector_start + 1) * 512 in
+  Lwt_bytes.unsafe_blit buf (sector_start * 512) mmap (offset * 512) len;
+  Lwt.return ()
  
 let mk_backend_path (domid,devid) subpath = 
-	Printf.sprintf "%s/%d/%d/%s" backend_path domid devid subpath
+  Printf.sprintf "%s/%d/%d/%s" backend_path domid devid subpath
 
 let writev client pairs =
   with_xs client (fun xs ->
@@ -98,122 +96,122 @@ let writev client pairs =
   )
 
 let handle_backend client (domid,devid) =
-	(* Tell xapi we've noticed the backend *)
-	lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "hotplug-status") "online") in
+  (* Tell xapi we've noticed the backend *)
+  lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "hotplug-status") "online") in
 
-    (* Read the params key *)
-    lwt params = with_xs client (fun xs -> read xs (mk_backend_path (domid,devid) "params")) in
+  (* Read the params key *)
+  lwt params = with_xs client (fun xs -> read xs (mk_backend_path (domid,devid) "params")) in
 
-    lwt () = Lwt_log.error ~logger ("Params=" ^ params ^ "\n") in
+  lwt () = Lwt_log.error ~logger ("Params=" ^ params ^ "\n") in
 
-    try_lwt 
+  try_lwt 
 
-	lwt vhd = Vhd.load_vhd Sys.argv.(1) in
+    lwt vhd = Vhd.load_vhd Sys.argv.(1) in
 
-	let size = vhd.Vhd.footer.Vhd.f_current_size in
+    let size = vhd.Vhd.footer.Vhd.f_current_size in
    
-        (* Write the disk information for the frontend *)
-        let di = Blkproto.({ DiskInfo.sector_size = sector_size;
-                             sectors = Int64.div size (Int64.of_int sector_size);
-                             media = Media.Disk;
-                             mode = Mode.ReadWrite }) in
-        lwt () = writev client (List.map (fun (k, v) -> mk_backend_path (domid,devid) k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
+    (* Write the disk information for the frontend *)
+    let di = Blkproto.({ DiskInfo.sector_size = sector_size;
+                         sectors = Int64.div size (Int64.of_int sector_size);
+                         media = Media.Disk;
+                         mode = Mode.ReadWrite }) in
+    lwt () = writev client (List.map (fun (k, v) -> mk_backend_path (domid,devid) k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
     lwt frontend = with_xs client (fun xs -> read xs (mk_backend_path (domid,devid) "frontend")) in
    
     let handled=ref false in
 
     wait client (fun xs -> 
-	   lwt state = read xs (frontend ^ "/state") in
-       match state with
-       | "1"
-	   | "2" ->
-		   lwt () = Lwt_log.error_f ~logger "state=%s\n" state in
-		   raise Eagain
-	   | "3" ->
-		   lwt () = Lwt_log.error_f ~logger "3 (frontend state=3)\n" in
-		   lwt ring_ref = with_xs client (fun xs -> read xs (frontend ^ "/ring-ref")) in
-           let ring_ref = Gnttab.grant_table_index_of_int32 (Int32.of_string ring_ref) in
-	       lwt evtchn = with_xs client (fun xs -> read xs (frontend ^ "/event-channel")) in
-           let evtchn = int_of_string evtchn in
+      lwt state = read xs (frontend ^ "/state") in
+      match state with
+      | "1"
+      | "2" ->
+        lwt () = Lwt_log.error_f ~logger "state=%s\n" state in
+        raise Eagain
+      | "3" ->
+        lwt () = Lwt_log.error_f ~logger "3 (frontend state=3)\n" in
+        lwt ring_ref = with_xs client (fun xs -> read xs (frontend ^ "/ring-ref")) in
+        let ring_ref = Gnttab.grant_table_index_of_int32 (Int32.of_string ring_ref) in
+        lwt evtchn = with_xs client (fun xs -> read xs (frontend ^ "/event-channel")) in
+        let evtchn = int_of_string evtchn in
 
-		   lwt protocol = try_lwt with_xs client (fun xs -> read xs (frontend ^ "/protocol")) with _ -> return "native" in
+        lwt protocol = try_lwt with_xs client (fun xs -> read xs (frontend ^ "/protocol")) with _ -> return "native" in
      
-           lwt () = Lwt_log.error_f ~logger "Got ring-ref=%s evtchn=%d protocol=%s\n" (Gnttab.string_of_grant_table_index ring_ref) evtchn protocol in
-           let proto = match Blkproto.Protocol.of_string protocol with
-             | Some x -> x
-             | None -> failwith (Printf.sprintf "Unknown protocol: %s" protocol) in
+        lwt () = Lwt_log.error_f ~logger "Got ring-ref=%s evtchn=%d protocol=%s\n" (Gnttab.string_of_grant_table_index ring_ref) evtchn protocol in
+        let proto = match Blkproto.Protocol.of_string protocol with
+          | `OK x -> x
+          | `Error x -> failwith x in
 
-           begin if not !handled then 
-			   let be_thread = Blkback.init xg xe domid ring_ref evtchn proto Activations.wait {
-				   Blkback.read = do_read_vhd vhd;
-				   Blkback.write = do_write_vhd vhd } in
-			   ignore(with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "state") "4"));
-			   let waiter = 
-				   lwt () = wait client 
-				       (fun xs -> 
-					       try_lwt 
-						       lwt x = read xs (frontend ^ "/state") in
-			                   lwt _ = Lwt_log.error_f ~logger "XXX state=%s" x in
-			                   raise Eagain 
-	                       with Xs_protocol.Enoent _ -> 
-					           lwt _ = Lwt_log.error_f ~logger "XXX caught enoent while reading frontend state" in
-					           return ()); 
-                   in
-                   Lwt.cancel be_thread;
-	               Lwt.return ()
-               in
-(*handle_ring mmap client (domid,devid) frontend ring_ref evtchn in*)
-			   handled := true
-		   else 
-			   () 
-		   end;
-           return ()
-       | "5"
-	   | _ ->
-           return ())
-    with e ->
-		lwt () = Lwt_log.error_f ~logger "exn: %s" (Printexc.to_string e) in
+        begin if not !handled then 
+          let be_thread = Blkback.init xg xe domid ring_ref evtchn proto Activations.wait {
+            Blkback.read = do_read_vhd vhd;
+            Blkback.write = do_write_vhd vhd } in
+          ignore(with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "state") "4"));
+          let waiter = 
+            lwt () = wait client 
+              (fun xs -> 
+                 try_lwt
+                   lwt x = read xs (frontend ^ "/state") in
+                   lwt _ = Lwt_log.error_f ~logger "XXX state=%s" x in
+                   raise Eagain
+                 with Xs_protocol.Enoent _ -> 
+                   lwt _ = Lwt_log.error_f ~logger "XXX caught enoent while reading frontend state" in
+                   return ()) 
+            in
+            Lwt.cancel be_thread;
+            Lwt.return ()
+          in
+          (*handle_ring mmap client (domid,devid) frontend ring_ref evtchn in*)
+          handled := true
+          else 
+            ()
+        end;
         return ()
+      | "5"
+      | _ ->
+        return ())
+  with e ->
+    lwt () = Lwt_log.error_f ~logger "exn: %s" (Printexc.to_string e) in
+    return ()
 
 let rec new_backends_loop client =
-	with_xs client (fun xs -> 
-		write xs backend_path "foo");
-	wait client (fun xs ->
-		lwt dir = directory xs backend_path in
-		let dir = List.filter (fun x -> String.length x > 0) dir in
-		lwt _ = Lwt_log.error ~logger
-			("Paths: [" ^ 
-					(String.concat "," 
-						 (List.map (fun s -> Printf.sprintf "'%s'" s) dir)) ^ "]\n") in
-		lwt dir = Lwt_list.fold_left_s (fun acc path1 -> 
-			let new_path = (backend_path ^ "/" ^ path1) in
-			lwt () = Lwt_log.error ~logger ("checking path: " ^ new_path ^ "\n") in
-			try_lwt 
-				lwt subdir = directory xs new_path in
-                return (List.fold_left (fun acc path2 ->  
-					try
-						let domid = int_of_string path1 in
-						let devid = int_of_string path2 in
-						BackendSet.add (domid,devid) acc
-					with _ ->
-						acc
-				) acc subdir)
-            with _ -> return acc) BackendSet.empty dir in
-	    let diff = BackendSet.diff dir !backends in
-		if BackendSet.is_empty diff 
-		then raise Eagain 
-		else 
-			begin 
-				backends := dir;
-				BackendSet.iter (fun x -> ignore(handle_backend client x)) diff;
-				return ()
-			end) >>= fun () -> new_backends_loop client
+  with_xs client (fun xs -> 
+    write xs backend_path "foo");
+  wait client (fun xs ->
+    lwt dir = directory xs backend_path in
+    let dir = List.filter (fun x -> String.length x > 0) dir in
+    lwt _ = Lwt_log.error ~logger
+      ("Paths: [" ^ 
+        (String.concat "," 
+          (List.map (fun s -> Printf.sprintf "'%s'" s) dir)) ^ "]\n") in
+    lwt dir = Lwt_list.fold_left_s (fun acc path1 -> 
+    let new_path = (backend_path ^ "/" ^ path1) in
+    lwt () = Lwt_log.error ~logger ("checking path: " ^ new_path ^ "\n") in
+    try_lwt 
+      lwt subdir = directory xs new_path in
+      return (List.fold_left (fun acc path2 ->  
+        try
+          let domid = int_of_string path1 in
+          let devid = int_of_string path2 in
+          BackendSet.add (domid,devid) acc
+        with _ ->
+          acc
+      ) acc subdir)
+    with _ -> return acc) BackendSet.empty dir in
+    let diff = BackendSet.diff dir !backends in
+    if BackendSet.is_empty diff 
+    then raise Eagain 
+    else 
+      begin 
+        backends := dir;
+        BackendSet.iter (fun x -> ignore(handle_backend client x)) diff;
+        return ()
+      end) >>= fun () -> new_backends_loop client
 
 let main () =
-	lwt () = Lwt_log.debug ~logger "main()" in
-	Activations.run ();
-    lwt client = make () in
-    new_backends_loop client
+  lwt () = Lwt_log.debug ~logger "main()" in
+  Activations.run ();
+  lwt client = make () in
+  new_backends_loop client
 
 let _ =
   Lwt_main.run (main ())
