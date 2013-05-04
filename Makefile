@@ -1,4 +1,5 @@
 
+.PHONY: dist/build/vhddisk/vhddisk
 dist/build/vhddisk/vhddisk: configure.done
 	obuild build
 
