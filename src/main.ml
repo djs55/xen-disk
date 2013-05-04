@@ -30,7 +30,8 @@ let backends = ref BackendSet.empty
 let xg = Gnttab.interface_open ()
 let xe = Eventchn.init ()
 
-let empty_sector = String.make 512 '\000'
+let sector_size = 512
+let empty_sector = String.make sector_size '\000'
 
 let do_read_vhd vhd buf offset sector_start sector_end =
     try_lwt
@@ -91,6 +92,11 @@ let do_write mmap buf offset sector_start sector_end =
 let mk_backend_path (domid,devid) subpath = 
 	Printf.sprintf "%s/%d/%d/%s" backend_path domid devid subpath
 
+let writev client pairs =
+  with_xs client (fun xs ->
+    Lwt_list.iter_s (fun (k, v) -> write xs k v) pairs
+  )
+
 let handle_backend client (domid,devid) =
 	(* Tell xapi we've noticed the backend *)
 	lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "hotplug-status") "online") in
@@ -106,11 +112,12 @@ let handle_backend client (domid,devid) =
 
 	let size = vhd.Vhd.footer.Vhd.f_current_size in
    
-    (* Write some junk into the backend for the frontend to read *)
-
-    lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "sector-size") "512") in
-    lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "sectors") (Printf.sprintf "%Ld" (Int64.div size 512L))) in
-    lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid, devid) "info") "1") in
+        (* Write the disk information for the frontend *)
+        let di = Blkproto.({ DiskInfo.sector_size = sector_size;
+                             sectors = Int64.div size (Int64.of_int sector_size);
+                             media = Media.Disk;
+                             mode = Mode.ReadWrite }) in
+        lwt () = writev client (List.map (fun (k, v) -> mk_backend_path (domid,devid) k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
     lwt frontend = with_xs client (fun xs -> read xs (mk_backend_path (domid,devid) "frontend")) in
    
     let handled=ref false in
