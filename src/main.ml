@@ -87,8 +87,8 @@ let do_write mmap buf offset sector_start sector_end =
   Lwt_bytes.unsafe_blit buf (sector_start * 512) mmap (offset * 512) len;
   Lwt.return ()
  
-let mk_backend_path (domid,devid) subpath = 
-  Printf.sprintf "%s/%d/%d/%s" backend_path domid devid subpath
+let mk_backend_path (domid,devid) = 
+  Printf.sprintf "%s/%d/%d/" backend_path domid devid
 
 let writev client pairs =
   with_xs client (fun xs ->
@@ -100,12 +100,19 @@ let readv client path keys =
     Lwt_list.map_s (fun k -> lwt v = read xs (path ^ "/" ^ k) in return (k, v)) keys
   )
 
+let read_one client k = with_xs client (fun xs -> read xs k)
+let write_one client k v = with_xs client (fun xs -> write xs k v)
+
 let handle_backend client (domid,devid) =
+  let backend_path = mk_backend_path (domid,devid) in
+
   (* Tell xapi we've noticed the backend *)
-  lwt () = with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "hotplug-status") "online") in
+  lwt () = write_one client
+    (backend_path ^ Blkproto.Hotplug._hotplug_status)
+    Blkproto.Hotplug._online in
 
   (* Read the params key *)
-  lwt params = with_xs client (fun xs -> read xs (mk_backend_path (domid,devid) "params")) in
+  lwt params = read_one client (backend_path ^ Blkproto.Hotplug._params) in
 
   lwt () = Lwt_log.error ~logger ("Params=" ^ params ^ "\n") in
 
@@ -120,57 +127,43 @@ let handle_backend client (domid,devid) =
                          sectors = Int64.div size (Int64.of_int sector_size);
                          media = Media.Disk;
                          mode = Mode.ReadWrite }) in
-    lwt () = writev client (List.map (fun (k, v) -> mk_backend_path (domid,devid) k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
-    lwt frontend_path = with_xs client (fun xs -> read xs (mk_backend_path (domid,devid) "frontend")) in
+    lwt () = writev client (List.map (fun (k, v) -> backend_path ^ k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
+    lwt frontend_path = read_one client (backend_path ^ "frontend") in
    
     let handled=ref false in
 
-    wait client (fun xs ->
-      lwt frontend = readv client frontend_path
-        (Blkproto.RingInfo.keys @ Blkproto.State.keys) in
-      let open Blkproto.State in
-      match of_assoc_list frontend with
-      | `Error x -> failwith x
-      | `OK Initialising
-      | `OK InitWait ->
-        raise Eagain
-      | `OK Initialised ->
-        lwt () = Lwt_log.error_f ~logger "3 (frontend state=3)\n" in
-        let ring_info = match Blkproto.RingInfo.of_assoc_list frontend with
-          | `OK x -> x
-          | `Error x -> failwith x in
+    (* wait for the frontend to enter state Initialised *)
+    lwt () = wait client (fun xs ->
+      lwt state = read xs (frontend_path ^ Blkproto.State._state) in
+      if Blkproto.State.of_string state = Some Blkproto.State.Initialised
+      then return ()
+      else raise Eagain
+    ) in
+
+    lwt frontend = readv client frontend_path Blkproto.RingInfo.keys in
+    lwt () = Lwt_log.error_f ~logger "3 (frontend state=3)\n" in
+    let ring_info = match Blkproto.RingInfo.of_assoc_list frontend with
+      | `OK x -> x
+      | `Error x -> failwith x in
      
-        lwt () = Lwt_log.error_f ~logger "%s" (Blkproto.RingInfo.to_string ring_info) in
-        lwt () = if not !handled then 
-          let be_thread = Blkback.init xg xe domid ring_info Activations.wait {
-            Blkback.read = do_read_vhd vhd;
-            Blkback.write = do_write_vhd vhd
-          } in
-          lwt () = writev client (List.map (fun (k, v) -> mk_backend_path (domid,devid) k, v) (Blkproto.State.to_assoc_list Blkproto.State.Connected)) in
-          let waiter = 
-            lwt () = wait client 
-              (fun xs -> 
-                 try_lwt
-                   lwt x = read xs (frontend_path ^ "/state") in
-                   lwt _ = Lwt_log.error_f ~logger "XXX state=%s" x in
-                   raise Eagain
-                 with Xs_protocol.Enoent _ -> 
-                   lwt _ = Lwt_log.error_f ~logger "XXX caught enoent while reading frontend state" in
-                   return ()) 
-            in
-            Lwt.cancel be_thread;
-            Lwt.return ()
-          in
-          (*handle_ring mmap client (domid,devid) frontend ring_ref evtchn in*)
-          handled := true;
-          return ()
-          else 
-          return () in
-        return ()
-      | `OK Connected
-      | `OK Closing
-      | `OK Closed ->
-        return ())
+    lwt () = Lwt_log.error_f ~logger "%s" (Blkproto.RingInfo.to_string ring_info) in
+    let be_thread = Blkback.init xg xe domid ring_info Activations.wait {
+      Blkback.read = do_read_vhd vhd;
+      Blkback.write = do_write_vhd vhd
+    } in
+    lwt () = writev client (List.map (fun (k, v) -> backend_path ^ k, v) (Blkproto.State.to_assoc_list Blkproto.State.Connected)) in
+
+    (* wait for the frontend to disappear *)
+    lwt () = wait client (fun xs -> 
+      try_lwt
+        lwt x = read xs (frontend_path ^ "/state") in
+        lwt _ = Lwt_log.error_f ~logger "XXX state=%s" x in
+        raise Eagain
+      with Xs_protocol.Enoent _ -> 
+        lwt _ = Lwt_log.error_f ~logger "XXX caught enoent while reading frontend state" in
+        return ()) in
+    Lwt.cancel be_thread;
+    Lwt.return ()
   with e ->
     lwt () = Lwt_log.error_f ~logger "exn: %s" (Printexc.to_string e) in
     return ()
