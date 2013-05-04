@@ -1,1 +1,4 @@
 configure.done
+*.swp
+*.swo
+dist/
