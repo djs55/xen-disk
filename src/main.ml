@@ -141,11 +141,12 @@ let handle_backend client (domid,devid) =
           | `Error x -> failwith x in
      
         lwt () = Lwt_log.error_f ~logger "%s" (Blkproto.RingInfo.to_string ring_info) in
-        begin if not !handled then 
+        lwt () = if not !handled then 
           let be_thread = Blkback.init xg xe domid ring_info Activations.wait {
             Blkback.read = do_read_vhd vhd;
-            Blkback.write = do_write_vhd vhd } in
-          ignore(with_xs client (fun xs -> write xs (mk_backend_path (domid,devid) "state") "4"));
+            Blkback.write = do_write_vhd vhd
+          } in
+          lwt () = writev client (List.map (fun (k, v) -> mk_backend_path (domid,devid) k, v) (Blkproto.State.to_assoc_list Blkproto.State.Connected)) in
           let waiter = 
             lwt () = wait client 
               (fun xs -> 
@@ -161,10 +162,10 @@ let handle_backend client (domid,devid) =
             Lwt.return ()
           in
           (*handle_ring mmap client (domid,devid) frontend ring_ref evtchn in*)
-          handled := true
+          handled := true;
+          return ()
           else 
-            ()
-        end;
+          return () in
         return ()
       | `OK Connected
       | `OK Closing
