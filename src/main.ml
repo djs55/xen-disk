@@ -18,15 +18,22 @@ open Xs_protocol
 module Client = Xs_client.Client(Xs_transport_lwt_unix_client)
 open Client
 
+module Common = struct
+  type t = {
+    verbose: bool;
+    debug: bool;
+  }
+  (** options common to all subcommands *)
+
+  let make verbose debug = { verbose; debug }
+end
+
 module BackendSet = Set.Make(struct type t = int * int let compare = compare end)
 
 let backend_path="/local/domain/0/backend/ovbd"
 let logger = Lwt_log.channel ~close_mode:`Keep ~channel:Lwt_io.stdout ()
 
 let backends = ref BackendSet.empty
-
-let xg = Gnttab.interface_open ()
-let xe = Eventchn.init ()
 
 let sector_size = 512
 let empty_sector = String.make sector_size '\000'
@@ -104,6 +111,9 @@ let read_one client k = with_xs client (fun xs -> read xs k)
 let write_one client k v = with_xs client (fun xs -> write xs k v)
 
 let handle_backend client (domid,devid) =
+  let xg = Gnttab.interface_open () in
+  let xe = Eventchn.init () in
+
   let backend_path = mk_backend_path (domid,devid) in
 
   (* Tell xapi we've noticed the backend *)
@@ -208,5 +218,58 @@ let main () =
   lwt client = make () in
   new_backends_loop client
 
+let connect (common: Common.t) (vm: string option) =
+  Lwt_main.run (main ());
+  `Ok ()
+
+open Cmdliner
+
+let project_url = "http://github.com/djs55/vhddisk"
+
+(* Help sections common to all commands *)
+
+let _common_options = "COMMON OPTIONS"
+let help = [ 
+ `S _common_options; 
+ `P "These options are common to all commands.";
+ `S "MORE HELP";
+ `P "Use `$(mname) $(i,COMMAND) --help' for help on a single command."; `Noblank;
+ `S "BUGS"; `P (Printf.sprintf "Check bug reports at %s" project_url);
+]
+
+(* Options common to all commands *)
+let common_options_t = 
+  let docs = _common_options in 
+  let debug = 
+    let doc = "Give only debug output." in
+    Arg.(value & flag & info ["debug"] ~docs ~doc) in
+  let verb =
+    let doc = "Give verbose output." in
+    let verbose = true, Arg.info ["v"; "verbose"] ~docs ~doc in 
+    Arg.(last & vflag_all [false] [verbose]) in 
+  Term.(pure Common.make $ debug $ verb)
+
+let connect_command =
+  let doc = "Connect a disk to a specific VM." in
+  let man = [
+    `S "DESCRIPTION";
+    `P "Connect a disk to a specific VM.";
+  ] in
+  let vm =
+    let doc = "The domain, UUID or name of the VM to connect disk to." in
+    Arg.(value & pos 0 (some string) None & info [] ~docv:"VM" ~doc) in
+  Term.(ret (pure connect $ common_options_t $ vm)),
+  Term.info "connect" ~sdocs:_common_options ~doc ~man
+
+let default_cmd = 
+  let doc = "manipulate virtual block devices on Xen virtual machines" in 
+  let man = help in
+  Term.(ret (pure (fun _ -> `Help (`Pager, None)) $ common_options_t)),
+  Term.info "vhddisk" ~version:"1.0.0" ~sdocs:_common_options ~doc ~man
+
+let cmds = [ connect_command ]
+
 let _ =
-  Lwt_main.run (main ())
+  match Term.eval_choice default_cmd cmds with
+  | `Error _ -> exit 1
+  | _ -> exit 0

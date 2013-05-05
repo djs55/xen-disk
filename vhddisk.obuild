@@ -6,6 +6,6 @@ obuild-ver: 1
 executable vhddisk 
   main: main.ml
   src-dir: src
-  build-deps: xenstore, xenstore.client, xenstore_transport.lwt, lwt, lwt.unix, vhd, xenblock, xenblock.back, xenctrl.lwt
+  build-deps: xenstore, xenstore.client, xenstore_transport.lwt, lwt, lwt.unix, vhd, xenblock, xenblock.back, xenctrl.lwt, cmdliner
   pp: camlp4o
 
