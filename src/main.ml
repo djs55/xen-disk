@@ -31,9 +31,10 @@ module Common = struct
   let make verbose debug = { verbose; debug }
 end
 
+let ( >>= ) = Blkproto.( >>= )
+
 module BackendSet = Set.Make(struct type t = int * int let compare = compare end)
 
-let backend_path="/local/domain/0/backend/ovbd"
 let logger = Lwt_log.channel ~close_mode:`Keep ~channel:Lwt_io.stdout ()
 
 let backends = ref BackendSet.empty
@@ -125,14 +126,24 @@ let writev client pairs =
   )
 
 let readv client path keys =
-  with_xs client (fun xs ->
-    Lwt_list.map_s (fun k -> lwt v = read xs (path ^ "/" ^ k) in return (k, v)) keys
-  )
+  lwt options = with_xs client (fun xs ->
+    Lwt_list.map_s (fun k ->
+      try_lwt
+        lwt v = read xs (path ^ "/" ^ k) in
+        return (Some (k, v))
+      with _ -> return None) keys
+  ) in
+  return (List.fold_left (fun acc x -> match x with None -> acc | Some y -> y :: acc) [] options)
 
-let read_one client k = with_xs client (fun xs -> read xs k)
+let read_one client k = with_xs client (fun xs ->
+  try_lwt
+    lwt v = read xs k in
+    return (`OK v)
+  with _ -> return (`Error ("failed to read: " ^ k)))
+
 let write_one client k v = with_xs client (fun xs -> write xs k v)
 
-let exists client k = with_xs client (fun xs -> try_lwt lwt _ = read xs k in return true with _ -> return false)
+let exists client k = match_lwt read_one client k with `Error _ -> return false | _ -> return true
 
 module Server(S: STORAGE) = struct
 
@@ -157,14 +168,18 @@ let handle_backend t client (domid,devid) =
                          media = Media.Disk;
                          mode = Mode.ReadWrite }) in
     lwt () = writev client (List.map (fun (k, v) -> backend_path ^ k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
-    lwt frontend_path = read_one client (backend_path ^ "frontend") in
+    lwt frontend_path = match_lwt read_one client (backend_path ^ "frontend") with
+      | `Error x -> failwith x
+      | `OK x -> return x in
    
     (* wait for the frontend to enter state Initialised *)
     lwt () = wait client (fun xs ->
-      lwt state = read xs (frontend_path ^ Blkproto.State._state) in
-      if Blkproto.State.of_string state = Some Blkproto.State.Initialised
-      then return ()
-      else raise Eagain
+      try_lwt
+        lwt state = read xs (frontend_path ^ Blkproto.State._state) in
+        if Blkproto.State.of_string state = Some Blkproto.State.Initialised
+        then return ()
+        else raise Eagain
+      with Xs_protocol.Enoent _ -> raise Eagain
     ) in
 
     lwt frontend = readv client frontend_path Blkproto.RingInfo.keys in
@@ -183,12 +198,11 @@ let handle_backend t client (domid,devid) =
     (* wait for the frontend to disappear *)
     lwt () = wait client (fun xs -> 
       try_lwt
-        lwt x = read xs (frontend_path ^ "/state") in
-        lwt _ = Lwt_log.error_f ~logger "XXX state=%s" x in
+        lwt _ = read xs (frontend_path ^ "/state") in
         raise Eagain
-      with Xs_protocol.Enoent _ -> 
-        lwt _ = Lwt_log.error_f ~logger "XXX caught enoent while reading frontend state" in
-        return ()) in
+      with Xs_protocol.Eagain ->
+        return ()
+    ) in
     Lwt.cancel be_thread;
     Lwt.return ()
   with e ->
@@ -248,25 +262,30 @@ let find_vm client vm =
   else begin
     lwt valid_domids = with_xs client (fun xs -> directory xs "/local/domain") in
     lwt valid_uuids = Lwt_list.map_s (fun d ->
-      lwt path = read_one client ("/local/domain/" ^ d ^ "/vm") in
-      return (Filename.basename path)) valid_domids in
+      match_lwt read_one client ("/local/domain/" ^ d ^ "/vm") with
+      | `OK path -> return (Some (Filename.basename path))
+      | `Error _ -> return None
+    ) valid_domids in
     lwt valid_names = Lwt_list.map_s (fun d ->
-      read_one client ("/local/domain/" ^ d ^ "/name")) valid_domids in
+      match_lwt read_one client ("/local/domain/" ^ d ^ "/name") with
+      | `OK path -> return (Some path)
+      | `Error _ -> return None
+    ) valid_domids in
     let uuids_to_domids = List.combine valid_uuids valid_domids in
     let names_to_domids = List.combine valid_names valid_domids in
-    if List.mem_assoc vm uuids_to_domids
-    then return (Some (List.assoc vm uuids_to_domids))
-    else if List.mem_assoc vm names_to_domids
-    then return (Some (List.assoc vm names_to_domids))
+    if List.mem_assoc (Some vm) uuids_to_domids
+    then return (Some (List.assoc (Some vm) uuids_to_domids))
+    else if List.mem_assoc (Some vm) names_to_domids
+    then return (Some (List.assoc (Some vm) names_to_domids))
     else return None
   end
 
-let main vm path =
+let main (vm: string) path =
   lwt client = make () in
   lwt vm = match_lwt find_vm client vm with
     | Some vm -> return vm
     | None -> fail (Failure (Printf.sprintf "Failed to find VM %s" vm)) in
-  lwt () = Lwt_log.debug ~logger (Printf.sprintf "VM domain id: %s" vm) in
+  Printf.fprintf stderr "VM domain id: %s\n%!" vm;
   return ()
 
 let connect (common: Common.t) (vm: string option) (path: string option) =
