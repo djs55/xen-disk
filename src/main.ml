@@ -132,6 +132,8 @@ let readv client path keys =
 let read_one client k = with_xs client (fun xs -> read xs k)
 let write_one client k v = with_xs client (fun xs -> write xs k v)
 
+let exists client k = with_xs client (fun xs -> try_lwt lwt _ = read xs k in return true with _ -> return false)
+
 module Server(S: STORAGE) = struct
 
 let handle_backend t client (domid,devid) =
@@ -237,10 +239,38 @@ let main () =
   new_backends_loop client
 *)
 
+let find_vm client vm =
+  (* First interpret as a domain ID, then UUID, then name *)
+  let domainpath x = "/local/domain/" ^ x in
+  lwt e = exists client (domainpath vm) in
+  if e
+  then return (Some (domainpath vm))
+  else begin
+    lwt valid_domids = with_xs client (fun xs -> directory xs "/local/domain") in
+    lwt valid_uuids = Lwt_list.map_s (fun d ->
+      lwt path = read_one client ("/local/domain/" ^ d ^ "/vm") in
+      return (Filename.basename path)) valid_domids in
+    lwt valid_names = Lwt_list.map_s (fun d ->
+      read_one client ("/local/domain/" ^ d ^ "/name")) valid_domids in
+    let uuids_to_domids = List.combine valid_uuids valid_domids in
+    let names_to_domids = List.combine valid_names valid_domids in
+    if List.mem_assoc vm uuids_to_domids
+    then return (Some (domainpath (List.assoc vm uuids_to_domids)))
+    else if List.mem_assoc vm names_to_domids
+    then return (Some (domainpath (List.assoc vm names_to_domids)))
+    else return None
+  end
+
+let main vm path =
+  lwt client = make () in
+  lwt vm = find_vm client vm in 
+  return ()
+
 let connect (common: Common.t) (vm: string option) (path: string option) =
-(*
-  let () = Lwt_main.run (main ()) in
-*)
+  let vm = match vm with
+    | None -> failwith "Please name a VM to attach the disk to"
+    | Some x -> x in
+  let () = Lwt_main.run (main vm path) in
   `Ok ()
 
 open Cmdliner
