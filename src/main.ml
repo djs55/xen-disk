@@ -12,6 +12,9 @@
  * GNU Lesser General Public License for more details.
  *)
 
+let name = Filename.basename Sys.argv.(0)
+let project_url = "http://github.com/djs55/vhddisk"
+
 open Lwt
 open Blkback
 open Xs_protocol
@@ -112,8 +115,9 @@ module MMAP = struct
     Lwt.return () 
 end
 
-let mk_backend_path (domid,devid) = 
-  Printf.sprintf "%s/%d/%d/" backend_path domid devid
+let mk_backend_path client (domid,devid) =
+  lwt self = with_xs client (fun xs -> read xs "domid") in
+  return (Printf.sprintf "/local/domain/%s/backend/%s/%d/%d" self name domid devid)
 
 let writev client pairs =
   with_xs client (fun xs ->
@@ -134,21 +138,14 @@ let handle_backend t client (domid,devid) =
   let xg = Gnttab.interface_open () in
   let xe = Eventchn.init () in
 
-  let backend_path = mk_backend_path (domid,devid) in
+  lwt backend_path = mk_backend_path client (domid,devid) in
 
   (* Tell xapi we've noticed the backend *)
   lwt () = write_one client
     (backend_path ^ Blkproto.Hotplug._hotplug_status)
     Blkproto.Hotplug._online in
 
-  (* Read the params key *)
-  lwt params = read_one client (backend_path ^ Blkproto.Hotplug._params) in
-
-  lwt () = Lwt_log.error ~logger ("Params=" ^ params ^ "\n") in
-
   try_lwt 
-
-    lwt vhd = Vhd.load_vhd Sys.argv.(1) in
 
     let size = S.size t in
    
@@ -247,8 +244,6 @@ let connect (common: Common.t) (vm: string option) (path: string option) =
   `Ok ()
 
 open Cmdliner
-
-let project_url = "http://github.com/djs55/vhddisk"
 
 (* Help sections common to all commands *)
 
