@@ -244,7 +244,7 @@ let find_vm client vm =
   let domainpath x = "/local/domain/" ^ x in
   lwt e = exists client (domainpath vm) in
   if e
-  then return (Some (domainpath vm))
+  then return (Some vm)
   else begin
     lwt valid_domids = with_xs client (fun xs -> directory xs "/local/domain") in
     lwt valid_uuids = Lwt_list.map_s (fun d ->
@@ -255,15 +255,18 @@ let find_vm client vm =
     let uuids_to_domids = List.combine valid_uuids valid_domids in
     let names_to_domids = List.combine valid_names valid_domids in
     if List.mem_assoc vm uuids_to_domids
-    then return (Some (domainpath (List.assoc vm uuids_to_domids)))
+    then return (Some (List.assoc vm uuids_to_domids))
     else if List.mem_assoc vm names_to_domids
-    then return (Some (domainpath (List.assoc vm names_to_domids)))
+    then return (Some (List.assoc vm names_to_domids))
     else return None
   end
 
 let main vm path =
   lwt client = make () in
-  lwt vm = find_vm client vm in 
+  lwt vm = match_lwt find_vm client vm with
+    | Some vm -> return vm
+    | None -> fail (Failure (Printf.sprintf "Failed to find VM %s" vm)) in
+  lwt () = Lwt_log.debug ~logger (Printf.sprintf "VM domain id: %s" vm) in
   return ()
 
 let connect (common: Common.t) (vm: string option) (path: string option) =
