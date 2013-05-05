@@ -47,8 +47,8 @@ let do_read_vhd vhd buf offset sector_start sector_end =
     match res with 
     | Some (mmap, mmappos) -> 
       let mmappos = Int64.to_int mmappos in
-      let madvpos = (mmappos / 4096) * 4096 in
-      (* Lwt_bytes.madvise mmap madvpos 512 Lwt_bytes.MADV_WILLNEED;
+      (* let madvpos = (mmappos / 4096) * 4096 in
+         Lwt_bytes.madvise mmap madvpos 512 Lwt_bytes.MADV_WILLNEED;
          lwt () = Lwt_bytes.wait_mincore mmap madvpos in *)
       Lwt_bytes.unsafe_blit mmap mmappos buf (i*512) 512;
       Lwt.return ()
@@ -58,7 +58,7 @@ let do_read_vhd vhd buf offset sector_start sector_end =
     done in
     Lwt.return ()
   with e ->
-    Lwt_log.error_f ~logger "Caught exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end;
+    lwt () = Lwt_log.error_f ~logger "Caught exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end in
     Lwt.fail e
 
 let do_write_vhd vhd buf offset sector_start sector_end =
@@ -71,7 +71,7 @@ let do_write_vhd vhd buf offset sector_start sector_end =
     done in
     Lwt.return ()
   with e ->
-    Lwt_log.error_f ~logger "Caught exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end;
+    lwt () = Lwt_log.error_f ~logger "Caught exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end in
     Lwt.fail e
 
 let do_read mmap buf offset sector_start sector_end =
@@ -85,7 +85,7 @@ let do_read mmap buf offset sector_start sector_end =
     Lwt_bytes.unsafe_blit mmap pos2 buf (sector_start*512) len;
     Lwt.return ()
   with e ->
-    Lwt_log.error_f ~logger "Caught exception: %s, offset=%d sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end;
+    lwt () = Lwt_log.error_f ~logger "Caught exception: %s, offset=%d sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end in
     Lwt.fail e
 
 let do_write mmap buf offset sector_start sector_end =
@@ -140,8 +140,6 @@ let handle_backend client (domid,devid) =
     lwt () = writev client (List.map (fun (k, v) -> backend_path ^ k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
     lwt frontend_path = read_one client (backend_path ^ "frontend") in
    
-    let handled=ref false in
-
     (* wait for the frontend to enter state Initialised *)
     lwt () = wait client (fun xs ->
       lwt state = read xs (frontend_path ^ Blkproto.State._state) in
@@ -179,8 +177,7 @@ let handle_backend client (domid,devid) =
     return ()
 
 let rec new_backends_loop client =
-  with_xs client (fun xs -> 
-    write xs backend_path "foo");
+  lwt () = with_xs client (fun xs -> write xs backend_path "foo") in
   wait client (fun xs ->
     lwt dir = directory xs backend_path in
     let dir = List.filter (fun x -> String.length x > 0) dir in
@@ -214,12 +211,12 @@ let rec new_backends_loop client =
 
 let main () =
   lwt () = Lwt_log.debug ~logger "main()" in
-  Activations.run ();
+  let (_: unit Lwt.t) = Activations.run () in
   lwt client = make () in
   new_backends_loop client
 
 let connect (common: Common.t) (vm: string option) =
-  Lwt_main.run (main ());
+  let () = Lwt_main.run (main ()) in
   `Ok ()
 
 open Cmdliner
