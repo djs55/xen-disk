@@ -265,7 +265,7 @@ let default_cmd =
   let doc = "manipulate virtual block devices on Xen virtual machines" in 
   let man = help in
   Term.(ret (pure (fun _ -> `Help (`Pager, None)) $ common_options_t)),
-  Term.info "vhddisk" ~version:"1.0.0" ~sdocs:_common_options ~doc ~man
+  Term.info "blkback" ~version:"1.0.0" ~sdocs:_common_options ~doc ~man
 
 let cmds = [ connect_command ]
 

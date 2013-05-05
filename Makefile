@@ -1,20 +1,20 @@
 
-.PHONY: dist/build/vhddisk/vhddisk
-dist/build/vhddisk/vhddisk: configure.done
+.PHONY: dist/build/blkback/blkback
+dist/build/blkback/blkback: configure.done
 	obuild build
 
-configure.done: vhddisk.obuild
+configure.done: blkback.obuild
 	obuild configure
 	touch configure.done
 
 .PHONY: install uninstall clean
 
-install: dist/build/vhddisk/vhddisk
+install: dist/build/blkback/blkback
 	mkdir -p $(BINDIR)
-	cp dist/build/vhddisk/vhddisk $(BINDIR)/vhddisk
+	cp dist/build/blkback/blkback $(BINDIR)/blkback
 
 uninstall:
-	rm -f $(BINDIR)/vhddisk
+	rm -f $(BINDIR)/blkback
 
 clean:
 	obuild clean
