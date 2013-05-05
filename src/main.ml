@@ -38,62 +38,80 @@ let backends = ref BackendSet.empty
 let sector_size = 512
 let empty_sector = String.make sector_size '\000'
 
-let do_read_vhd vhd buf offset sector_start sector_end =
-  try_lwt
-    lwt () = for_lwt i=sector_start to sector_end do
+module type STORAGE = sig
+  type t
+
+  val size: t -> int64
+  val read: t -> OS.Io_page.t -> int64 -> int -> int -> unit Lwt.t
+  val write: t -> OS.Io_page.t -> int64 -> int -> int -> unit Lwt.t
+end
+
+module VHD = struct
+  type t = Vhd.vhd
+
+  let size t = t.Vhd.footer.Vhd.f_current_size
+
+  let read vhd buf offset sector_start sector_end =
+    try_lwt
+      lwt () = for_lwt i=sector_start to sector_end do
+      let offset = Int64.sub offset (Int64.of_int sector_start) in
+      let sectornum = Int64.add offset (Int64.of_int i) in
+      lwt res = Vhd.get_sector_pos vhd sectornum in
+      match res with 
+      | Some (mmap, mmappos) -> 
+        let mmappos = Int64.to_int mmappos in
+        (* let madvpos = (mmappos / 4096) * 4096 in
+           Lwt_bytes.madvise mmap madvpos 512 Lwt_bytes.MADV_WILLNEED;
+           lwt () = Lwt_bytes.wait_mincore mmap madvpos in *)
+        Lwt_bytes.unsafe_blit mmap mmappos buf (i*512) 512;
+        Lwt.return ()
+      | None -> 
+        Lwt_bytes.blit_string_bytes empty_sector 0 buf (i*512) 512;
+        Lwt.return ()
+      done in
+      Lwt.return ()
+    with e ->
+      lwt () = Lwt_log.error_f ~logger "Caught exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end in
+      Lwt.fail e
+
+  let write vhd buf offset sector_start sector_end =
+    let sec = String.create 512 in
     let offset = Int64.sub offset (Int64.of_int sector_start) in
-    let sectornum = Int64.add offset (Int64.of_int i) in
-    lwt res = Vhd.get_sector_pos vhd sectornum in
-    match res with 
-    | Some (mmap, mmappos) -> 
-      let mmappos = Int64.to_int mmappos in
-      (* let madvpos = (mmappos / 4096) * 4096 in
-         Lwt_bytes.madvise mmap madvpos 512 Lwt_bytes.MADV_WILLNEED;
-         lwt () = Lwt_bytes.wait_mincore mmap madvpos in *)
-      Lwt_bytes.unsafe_blit mmap mmappos buf (i*512) 512;
+    try_lwt
+      lwt () = for_lwt i=sector_start to sector_end do
+        Lwt_bytes.blit_bytes_string buf (i*512) sec 0 512;
+        Vhd.write_sector vhd (Int64.add offset (Int64.of_int i)) sec
+      done in
       Lwt.return ()
-    | None -> 
-      Lwt_bytes.blit_string_bytes empty_sector 0 buf (i*512) 512;
+    with e ->
+      lwt () = Lwt_log.error_f ~logger "Caught exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end in
+      Lwt.fail e
+end
+
+module MMAP = struct
+  type t = Lwt_bytes.t
+
+  let read mmap buf offset sector_start sector_end =
+    let offset = Int64.to_int offset in
+    try_lwt
+      let len = (sector_end - sector_start + 1) * 512 in
+      let pos = (offset / 8) * 4096 in
+      let pos2 = offset * 512 in
+      Lwt_bytes.madvise mmap pos (len + pos2 - pos) Lwt_bytes.MADV_WILLNEED;
+      lwt () = Lwt_bytes.wait_mincore mmap pos2 in
+      Lwt_bytes.unsafe_blit mmap pos2 buf (sector_start*512) len;
       Lwt.return ()
-    done in
-    Lwt.return ()
-  with e ->
-    lwt () = Lwt_log.error_f ~logger "Caught exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end in
-    Lwt.fail e
+    with e ->
+      lwt () = Lwt_log.error_f ~logger "Caught exception: %s, offset=%d sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end in
+      Lwt.fail e
 
-let do_write_vhd vhd buf offset sector_start sector_end =
-  let sec = String.create 512 in
-  let offset = Int64.sub offset (Int64.of_int sector_start) in
-  try_lwt
-    lwt () = for_lwt i=sector_start to sector_end do
-      Lwt_bytes.blit_bytes_string buf (i*512) sec 0 512;
-      Vhd.write_sector vhd (Int64.add offset (Int64.of_int i)) sec
-    done in
-    Lwt.return ()
-  with e ->
-    lwt () = Lwt_log.error_f ~logger "Caught exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end in
-    Lwt.fail e
-
-let do_read mmap buf offset sector_start sector_end =
-  let offset = Int64.to_int offset in
-  try_lwt
+  let write mmap buf offset sector_start sector_end =
+    let offset = Int64.to_int offset in
     let len = (sector_end - sector_start + 1) * 512 in
-    let pos = (offset / 8) * 4096 in
-    let pos2 = offset * 512 in
-    Lwt_bytes.madvise mmap pos (len + pos2 - pos) Lwt_bytes.MADV_WILLNEED;
-    lwt () = Lwt_bytes.wait_mincore mmap pos2 in
-    Lwt_bytes.unsafe_blit mmap pos2 buf (sector_start*512) len;
-    Lwt.return ()
-  with e ->
-    lwt () = Lwt_log.error_f ~logger "Caught exception: %s, offset=%d sector_start=%d sector_end=%d" (Printexc.to_string e) offset sector_start sector_end in
-    Lwt.fail e
+    Lwt_bytes.unsafe_blit buf (sector_start * 512) mmap (offset * 512) len;
+    Lwt.return () 
+end
 
-let do_write mmap buf offset sector_start sector_end =
-  let offset = Int64.to_int offset in
-  let len = (sector_end - sector_start + 1) * 512 in
-  Lwt_bytes.unsafe_blit buf (sector_start * 512) mmap (offset * 512) len;
-  Lwt.return ()
- 
 let mk_backend_path (domid,devid) = 
   Printf.sprintf "%s/%d/%d/" backend_path domid devid
 
@@ -110,7 +128,9 @@ let readv client path keys =
 let read_one client k = with_xs client (fun xs -> read xs k)
 let write_one client k v = with_xs client (fun xs -> write xs k v)
 
-let handle_backend client (domid,devid) =
+module Server(S: STORAGE) = struct
+
+let handle_backend t client (domid,devid) =
   let xg = Gnttab.interface_open () in
   let xe = Eventchn.init () in
 
@@ -130,7 +150,7 @@ let handle_backend client (domid,devid) =
 
     lwt vhd = Vhd.load_vhd Sys.argv.(1) in
 
-    let size = vhd.Vhd.footer.Vhd.f_current_size in
+    let size = S.size t in
    
     (* Write the disk information for the frontend *)
     let di = Blkproto.({ DiskInfo.sector_size = sector_size;
@@ -156,8 +176,8 @@ let handle_backend client (domid,devid) =
      
     lwt () = Lwt_log.error_f ~logger "%s" (Blkproto.RingInfo.to_string ring_info) in
     let be_thread = Blkback.init xg xe domid ring_info Activations.wait {
-      Blkback.read = do_read_vhd vhd;
-      Blkback.write = do_write_vhd vhd
+      Blkback.read = S.read t;
+      Blkback.write = S.write t
     } in
     lwt () = writev client (List.map (fun (k, v) -> backend_path ^ k, v) (Blkproto.State.to_assoc_list Blkproto.State.Connected)) in
 
@@ -175,7 +195,11 @@ let handle_backend client (domid,devid) =
   with e ->
     lwt () = Lwt_log.error_f ~logger "exn: %s" (Printexc.to_string e) in
     return ()
+end
 
+module S = Server(VHD)
+
+(*
 let rec new_backends_loop client =
   lwt () = with_xs client (fun xs -> write xs backend_path "foo") in
   wait client (fun xs ->
@@ -214,9 +238,12 @@ let main () =
   let (_: unit Lwt.t) = Activations.run () in
   lwt client = make () in
   new_backends_loop client
+*)
 
-let connect (common: Common.t) (vm: string option) =
+let connect (common: Common.t) (vm: string option) (path: string option) =
+(*
   let () = Lwt_main.run (main ()) in
+*)
   `Ok ()
 
 open Cmdliner
@@ -254,8 +281,11 @@ let connect_command =
   ] in
   let vm =
     let doc = "The domain, UUID or name of the VM to connect disk to." in
-    Arg.(value & pos 0 (some string) None & info [] ~docv:"VM" ~doc) in
-  Term.(ret (pure connect $ common_options_t $ vm)),
+    Arg.(value & pos 0 (some string) None & info [ ] ~docv:"VM" ~doc) in
+  let path =
+    let doc = "The path to the file containing the disk data." in
+    Arg.(value & opt (some file) None & info [ "path" ] ~docv:"PATH" ~doc) in
+  Term.(ret (pure connect $ common_options_t $ vm $ path)),
   Term.info "connect" ~sdocs:_common_options ~doc ~man
 
 let default_cmd = 
