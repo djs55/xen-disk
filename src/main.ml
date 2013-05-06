@@ -129,7 +129,7 @@ let get_my_domid client =
 
 let mk_backend_path client (domid,devid) =
   lwt self = get_my_domid client in
-  return (Printf.sprintf "/local/domain/%d/backend/%s/%d/%d/" self name domid devid)
+  return (Printf.sprintf "/local/domain/%d/backend/%s/%d/%d" self name domid devid)
 
 let mk_frontend_path client (domid,devid) =
   return (Printf.sprintf "/local/domain/%d/device/vbd/%d" domid devid)
@@ -169,7 +169,7 @@ let handle_backend t client (domid,devid) =
 
   (* Tell xapi we've noticed the backend *)
   lwt () = write_one client
-    (backend_path ^ Blkproto.Hotplug._hotplug_status)
+    (backend_path ^ "/" ^ Blkproto.Hotplug._hotplug_status)
     Blkproto.Hotplug._online in
 
   try_lwt 
@@ -181,8 +181,8 @@ let handle_backend t client (domid,devid) =
                          sectors = Int64.div size (Int64.of_int sector_size);
                          media = Media.Disk;
                          mode = Mode.ReadWrite }) in
-    lwt () = writev client (List.map (fun (k, v) -> backend_path ^ k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
-    lwt frontend_path = match_lwt read_one client (backend_path ^ "frontend") with
+    lwt () = writev client (List.map (fun (k, v) -> backend_path ^ "/" ^ k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
+    lwt frontend_path = match_lwt read_one client (backend_path ^ "/frontend") with
       | `Error x -> failwith x
       | `OK x -> return x in
    
@@ -207,7 +207,7 @@ let handle_backend t client (domid,devid) =
       Blkback.read = S.read t;
       Blkback.write = S.write t
     } in
-    lwt () = writev client (List.map (fun (k, v) -> backend_path ^ k, v) (Blkproto.State.to_assoc_list Blkproto.State.Connected)) in
+    lwt () = writev client (List.map (fun (k, v) -> backend_path ^ "/" ^ k, v) (Blkproto.State.to_assoc_list Blkproto.State.Connected)) in
 
     (* wait for the frontend to disappear *)
     lwt () = wait client (fun xs -> 
