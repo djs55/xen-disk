@@ -33,11 +33,7 @@ end
 
 let ( >>= ) = Blkproto.( >>= )
 
-module BackendSet = Set.Make(struct type t = int * int let compare = compare end)
-
 let logger = Lwt_log.channel ~close_mode:`Keep ~channel:Lwt_io.stdout ()
-
-let backends = ref BackendSet.empty
 
 let sector_size = 512
 let empty_sector = String.make sector_size '\000'
@@ -217,49 +213,6 @@ let handle_backend t client (domid,devid) =
     lwt () = Lwt_log.error_f ~logger "exn: %s" (Printexc.to_string e) in
     return ()
 end
-
-module S = Server(VHD)
-
-(*
-let rec new_backends_loop client =
-  lwt () = with_xs client (fun xs -> write xs backend_path "foo") in
-  wait client (fun xs ->
-    lwt dir = directory xs backend_path in
-    let dir = List.filter (fun x -> String.length x > 0) dir in
-    lwt _ = Lwt_log.error ~logger
-      ("Paths: [" ^ 
-        (String.concat "," 
-          (List.map (fun s -> Printf.sprintf "'%s'" s) dir)) ^ "]\n") in
-    lwt dir = Lwt_list.fold_left_s (fun acc path1 -> 
-    let new_path = (backend_path ^ "/" ^ path1) in
-    lwt () = Lwt_log.error ~logger ("checking path: " ^ new_path ^ "\n") in
-    try_lwt 
-      lwt subdir = directory xs new_path in
-      return (List.fold_left (fun acc path2 ->  
-        try
-          let domid = int_of_string path1 in
-          let devid = int_of_string path2 in
-          BackendSet.add (domid,devid) acc
-        with _ ->
-          acc
-      ) acc subdir)
-    with _ -> return acc) BackendSet.empty dir in
-    let diff = BackendSet.diff dir !backends in
-    if BackendSet.is_empty diff 
-    then raise Eagain 
-    else 
-      begin 
-        backends := dir;
-        BackendSet.iter (fun x -> ignore(handle_backend client x)) diff;
-        return ()
-      end) >>= fun () -> new_backends_loop client
-
-let main () =
-  lwt () = Lwt_log.debug ~logger "main()" in
-  let (_: unit Lwt.t) = Activations.run () in
-  lwt client = make () in
-  new_backends_loop client
-*)
 
 let find_vm client vm =
   (* First interpret as a domain ID, then UUID, then name *)
