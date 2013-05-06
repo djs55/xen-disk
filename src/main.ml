@@ -191,6 +191,7 @@ let handle_backend t client (domid,devid) =
       try_lwt
         lwt state = read xs (frontend_path ^ Blkproto.State._state) in
         if Blkproto.State.of_string state = Some Blkproto.State.Initialised
+        || Blkproto.State.of_string state = Some Blkproto.State.Connected
         then return ()
         else raise Eagain
       with Xs_protocol.Enoent _ -> raise Eagain
