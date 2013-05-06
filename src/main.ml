@@ -215,7 +215,7 @@ let handle_backend t client (domid,devid) =
       try_lwt
         lwt _ = read xs (frontend_path ^ "/state") in
         raise Eagain
-      with Xs_protocol.Eagain ->
+      with Xs_protocol.Enoent _ ->
         return ()
     ) in
     Lwt.cancel be_thread;
