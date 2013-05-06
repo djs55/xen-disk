@@ -301,7 +301,17 @@ let main (vm: string) path =
     media = Blkproto.Media.Disk;
     removable = false;
   }) in
-  lwt () = writev client (Blkproto.Connection.to_assoc_list c) in
+  lwt () = with_xst client (fun xs ->
+    Lwt_list.iter_s (fun (owner_domid, (k, v)) ->
+      lwt () = write xs k v in
+      let acl =
+        let open Xs_protocol.ACL in
+        { owner = owner_domid; other = READ; acl = [ ] } in
+      lwt () = setperms xs k acl in
+      return ()
+    ) (Blkproto.Connection.to_assoc_list c)
+  ) in
+
   backend_of_path path client (int_of_string vm, device)
 
 let connect (common: Common.t) (vm: string option) (path: string option) =
