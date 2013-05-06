@@ -120,9 +120,19 @@ module MMAP = struct
     Lwt.return () 
 end
 
+let get_my_domid client =
+  with_xs client (fun xs ->
+    try_lwt
+      lwt domid = read xs "domid" in
+      return (int_of_string domid)
+    with Xs_protocol.Enoent _ -> return 0)
+
 let mk_backend_path client (domid,devid) =
-  lwt self = with_xs client (fun xs -> try_lwt read xs "domid" with Xs_protocol.Enoent _ -> return "0") in
-  return (Printf.sprintf "/local/domain/%s/backend/%s/%d/%d/" self name domid devid)
+  lwt self = get_my_domid client in
+  return (Printf.sprintf "/local/domain/%d/backend/%s/%d/%d/" self name domid devid)
+
+let mk_frontend_path client (domid,devid) =
+  return (Printf.sprintf "/local/domain/%d/device/vbd/%d" domid devid)
 
 let writev client pairs =
   with_xs client (fun xs ->
@@ -277,6 +287,21 @@ let main (vm: string) path =
   lwt device = find_free_vbd client vm in
   Printf.fprintf stderr "Creating device %d (linux device /dev/%s)\n%!"
     device (Device_number.(to_linux_device (of_xenstore_key device)));
+  let domid = int_of_string vm in
+  lwt backend_path = mk_backend_path client (domid, device) in
+  lwt frontend_path = mk_frontend_path client (domid, device) in
+  lwt backend_domid = get_my_domid client in
+  let c = Blkproto.Connection.({
+    virtual_device = string_of_int device;
+    backend_path;
+    backend_domid;
+    frontend_path;
+    frontend_domid = domid;
+    mode = Blkproto.Mode.ReadWrite;
+    media = Blkproto.Media.Disk;
+    removable = false;
+  }) in
+  lwt () = writev client (Blkproto.Connection.to_assoc_list c) in
   backend_of_path path client (int_of_string vm, device)
 
 let connect (common: Common.t) (vm: string option) (path: string option) =
