@@ -280,12 +280,27 @@ let find_vm client vm =
     else return None
   end
 
+let (|>) a b = b a
+let find_free_vbd client vm =
+  lwt used = with_xs client (fun xs -> try_lwt directory xs (Printf.sprintf "/local/domain/%s/device/vbd" vm) with Xs_protocol.Enoent _ -> return []) in
+  let free =
+    used
+    |> List.map int_of_string
+    |> List.map Device_number.of_xenstore_key
+    |> List.map Device_number.to_disk_number
+    |> List.fold_left max (-1)
+    |> (fun x -> x + 1) in
+  return (Device_number.(to_xenstore_key (of_disk_number false free)))
+
 let main (vm: string) path =
   lwt client = make () in
   lwt vm = match_lwt find_vm client vm with
     | Some vm -> return vm
     | None -> fail (Failure (Printf.sprintf "Failed to find VM %s" vm)) in
-  Printf.fprintf stderr "VM domain id: %s\n%!" vm;
+  Printf.fprintf stderr "Operating on VM domain id: %s\n%!" vm;
+  lwt device = find_free_vbd client vm in
+  Printf.fprintf stderr "Creating device %d (linux device /dev/%s)\n%!"
+    device (Device_number.(to_linux_device (of_xenstore_key device)));
   return ()
 
 let connect (common: Common.t) (vm: string option) (path: string option) =
