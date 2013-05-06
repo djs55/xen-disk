@@ -50,6 +50,14 @@ module type STORAGE = sig
   val write: t -> OS.Io_page.t -> int64 -> int -> int -> unit Lwt.t
 end
 
+module DISCARD = struct
+  type t = unit
+
+  let size () = Int64.(mul (mul (mul 1024L 1024L) 1024L) 1024L)
+  let read () _ _ _ _ = return ()
+  let write () _ _ _ _ = return ()
+end
+
 module VHD = struct
   type t = Vhd.vhd
 
@@ -292,6 +300,21 @@ let find_free_vbd client vm =
     |> (fun x -> x + 1) in
   return (Device_number.(to_xenstore_key (of_disk_number false free)))
 
+let backend_of_path = function
+  | None ->
+    let module S = Server(DISCARD) in
+    S.handle_backend ()
+  | Some x ->
+    let fd = Unix.openfile x [ Unix.O_RDWR ] 0o0 in
+    let stats = Unix.LargeFile.fstat fd in
+    let mmap = Lwt_bytes.map_file ~fd ~shared:false () in
+    Unix.close fd;
+    let module S = Server(struct
+      include MMAP
+      let size _ = stats.Unix.LargeFile.st_size
+    end) in
+    S.handle_backend mmap
+
 let main (vm: string) path =
   lwt client = make () in
   lwt vm = match_lwt find_vm client vm with
@@ -301,7 +324,7 @@ let main (vm: string) path =
   lwt device = find_free_vbd client vm in
   Printf.fprintf stderr "Creating device %d (linux device /dev/%s)\n%!"
     device (Device_number.(to_linux_device (of_xenstore_key device)));
-  return ()
+  backend_of_path path client (int_of_string vm, device)
 
 let connect (common: Common.t) (vm: string option) (path: string option) =
   let vm = match vm with
