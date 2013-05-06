@@ -121,7 +121,7 @@ module MMAP = struct
 end
 
 let mk_backend_path client (domid,devid) =
-  lwt self = with_xs client (fun xs -> read xs "domid") in
+  lwt self = with_xs client (fun xs -> try_lwt read xs "domid" with Xs_protocol.Enoent _ -> return "0") in
   return (Printf.sprintf "/local/domain/%s/backend/%s/%d/%d" self name domid devid)
 
 let writev client pairs =
