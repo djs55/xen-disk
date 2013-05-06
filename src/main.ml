@@ -189,7 +189,7 @@ let handle_backend t client (domid,devid) =
     (* wait for the frontend to enter state Initialised *)
     lwt () = wait client (fun xs ->
       try_lwt
-        lwt state = read xs (frontend_path ^ Blkproto.State._state) in
+        lwt state = read xs (frontend_path ^ "/" ^ Blkproto.State._state) in
         if Blkproto.State.of_string state = Some Blkproto.State.Initialised
         || Blkproto.State.of_string state = Some Blkproto.State.Connected
         then return ()
