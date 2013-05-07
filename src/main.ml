@@ -280,6 +280,7 @@ let backend_of_path = function
     S.handle_backend mmap
 
 let main (vm: string) path =
+  let (_: unit Lwt.t) = Activations.run () in
   lwt client = make () in
   lwt vm = match_lwt find_vm client vm with
     | Some vm -> return vm
