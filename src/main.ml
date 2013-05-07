@@ -49,7 +49,7 @@ end
 module DISCARD = struct
   type t = unit
 
-  let size () = Int64.(mul (mul (mul 1024L 1024L) 1024L) 1024L)
+  let size () = Int64.(mul (mul 128L 1024L) 1024L)
   let read () _ _ _ _ = return ()
   let write () _ _ _ _ = return ()
 end
@@ -135,7 +135,7 @@ let mk_frontend_path client (domid,devid) =
   return (Printf.sprintf "/local/domain/%d/device/vbd/%d" domid devid)
 
 let writev client pairs =
-  with_xs client (fun xs ->
+  with_xst client (fun xs ->
     Lwt_list.iter_s (fun (k, v) -> write xs k v) pairs
   )
 
@@ -159,11 +159,20 @@ let write_one client k v = with_xs client (fun xs -> write xs k v)
 
 let exists client k = match_lwt read_one client k with `Error _ -> return false | _ -> return true
 
+let event_channel_interface =
+  let e = ref None in
+  fun () -> match !e with
+    | Some e -> e
+    | None ->
+      let e' = Eventchn.init () in
+      e := Some e';
+      e'
+
 module Server(S: STORAGE) = struct
 
 let handle_backend t client (domid,devid) =
   let xg = Gnttab.interface_open () in
-  let xe = Eventchn.init () in
+  let xe = event_channel_interface () in
 
   lwt backend_path = mk_backend_path client (domid,devid) in
 
@@ -280,7 +289,6 @@ let backend_of_path = function
     S.handle_backend mmap
 
 let main (vm: string) path =
-  let (_: unit Lwt.t) = Activations.run () in
   lwt client = make () in
   lwt vm = match_lwt find_vm client vm with
     | Some vm -> return vm
@@ -289,6 +297,9 @@ let main (vm: string) path =
   lwt device = find_free_vbd client vm in
   Printf.fprintf stderr "Creating device %d (linux device /dev/%s)\n%!"
     device (Device_number.(to_linux_device (of_xenstore_key device)));
+
+  let (_: unit Lwt.t) = Activations.run (event_channel_interface ()) in
+
   let domid = int_of_string vm in
   lwt backend_path = mk_backend_path client (domid, device) in
   lwt frontend_path = mk_frontend_path client (domid, device) in
