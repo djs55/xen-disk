@@ -17,6 +17,7 @@ let project_url = "http://github.com/djs55/vhddisk"
 
 open Lwt
 open Blkback
+open Gnt
 open Xs_protocol
 module Client = Xs_client.Client(Xs_transport_lwt_unix_client)
 open Client
