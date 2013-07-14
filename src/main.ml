@@ -169,6 +169,11 @@ let event_channel_interface =
       e := Some e';
       e'
 
+(* Request a hot-unplug *)
+let request_close client (domid, devid) =
+  lwt backend_path = mk_backend_path client (domid,devid) in
+  writev client (List.map (fun (k, v) -> backend_path ^ "/" ^ k, v) (Blkproto.State.to_assoc_list Blkproto.State.Closing))
+
 module Server(S: STORAGE) = struct
 
 let handle_backend t client (domid,devid) =
@@ -220,11 +225,13 @@ let handle_backend t client (domid,devid) =
     } in
     lwt () = writev client (List.map (fun (k, v) -> backend_path ^ "/" ^ k, v) (Blkproto.State.to_assoc_list Blkproto.State.Connected)) in
 
-    (* wait for the frontend to disappear *)
+    (* wait for the frontend to disappear or enter a Closed state *)
     lwt () = wait client (fun xs -> 
       try_lwt
-        lwt _ = read xs (frontend_path ^ "/state") in
-        raise Eagain
+        lwt state = read xs (frontend_path ^ "/state") in
+        if Blkproto.State.of_string state <> (Some Blkproto.State.Closed)
+        then raise Eagain
+        else return ()
       with Xs_protocol.Enoent _ ->
         return ()
     ) in
@@ -298,6 +305,7 @@ let backend_of_path path format = match path, format with
 
 let main (vm: string) path format =
   lwt client = make () in
+  (* Figure out where the device is going to go: *)
   lwt vm = match_lwt find_vm client vm with
     | Some vm -> return vm
     | None -> fail (Failure (Printf.sprintf "Failed to find VM %s" vm)) in
@@ -305,10 +313,21 @@ let main (vm: string) path format =
   lwt device = find_free_vbd client vm in
   Printf.fprintf stderr "Creating device %d (linux device /dev/%s)\n%!"
     device (Device_number.(to_linux_device (of_xenstore_key device)));
-
-  let (_: unit Lwt.t) = Activations.run (event_channel_interface ()) in
-
   let domid = int_of_string vm in
+
+  (* If we're asked to shutdown cleanly, initiate a hot-unplug *)
+  let shutdown_signal _ =
+    Printf.fprintf stderr "Received signal, requesting hot-unplug.\n%!";
+    let (_: unit Lwt.t) = request_close client (domid, device) in
+    () in
+  List.iter
+    (fun signal ->
+      let (_: Lwt_unix.signal_handler_id) = Lwt_unix.on_signal signal shutdown_signal in
+      ()
+    ) [ Sys.sigint; Sys.sigterm ];
+
+  (* Construct the device: *)
+  let (_: unit Lwt.t) = Activations.run (event_channel_interface ()) in
   lwt backend_path = mk_backend_path client (domid, device) in
   lwt frontend_path = mk_frontend_path client (domid, device) in
   lwt backend_domid = get_my_domid client in
@@ -334,7 +353,16 @@ let main (vm: string) path format =
   ) in
 
   lwt t = backend_of_path path format in
-  t client (int_of_string vm, device)
+  (* Serve requests until the frontend closes: *)
+  lwt () = t client (int_of_string vm, device) in
+  (* Clean up the backend: *)
+  with_xs client (fun xs ->
+    lwt () = rm xs backend_path in
+    Printf.fprintf stderr "Cleaning up backend path %s\n%!" backend_path;
+    lwt () = rm xs frontend_path in
+    Printf.fprintf stderr "Cleaning up frontend path %s\n%!" frontend_path;
+    return ()
+  )
 
 let connect (common: Common.t) (vm: string option) (path: string option) (format: string option) =
   let vm = match vm with
