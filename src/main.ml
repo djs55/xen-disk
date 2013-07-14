@@ -274,11 +274,12 @@ let find_free_vbd client vm =
     |> (fun x -> x + 1) in
   return (Device_number.(to_xenstore_key (of_disk_number false free)))
 
-let backend_of_path = function
-  | None ->
+let backend_of_path path format = match path, format with
+  | None, _ ->
     let module S = Server(DISCARD) in
-    S.handle_backend ()
-  | Some x ->
+    return (S.handle_backend ())
+  | Some x, Some "raw"
+  | Some x, None ->
     let fd = Unix.openfile x [ Unix.O_RDWR ] 0o0 in
     let stats = Unix.LargeFile.fstat fd in
     let mmap = Lwt_bytes.map_file ~fd ~shared:false () in
@@ -287,9 +288,15 @@ let backend_of_path = function
       include MMAP
       let size _ = stats.Unix.LargeFile.st_size
     end) in
-    S.handle_backend mmap
+    return (S.handle_backend mmap)
+  | Some x, Some "vhd" ->
+    lwt vhd = Vhd.load_vhd x in
+    let module S = Server(VHD) in
+    return (S.handle_backend vhd)
+  | _, Some format ->
+    failwith (Printf.sprintf "Unknown format: %s" format)    
 
-let main (vm: string) path =
+let main (vm: string) path format =
   lwt client = make () in
   lwt vm = match_lwt find_vm client vm with
     | Some vm -> return vm
@@ -326,13 +333,14 @@ let main (vm: string) path =
     ) (Blkproto.Connection.to_assoc_list c)
   ) in
 
-  backend_of_path path client (int_of_string vm, device)
+  lwt t = backend_of_path path format in
+  t client (int_of_string vm, device)
 
-let connect (common: Common.t) (vm: string option) (path: string option) =
+let connect (common: Common.t) (vm: string option) (path: string option) (format: string option) =
   let vm = match vm with
     | None -> failwith "Please name a VM to attach the disk to"
     | Some x -> x in
-  let () = Lwt_main.run (main vm path) in
+  let () = Lwt_main.run (main vm path format) in
   `Ok ()
 
 open Cmdliner
@@ -365,14 +373,19 @@ let connect_command =
   let man = [
     `S "DESCRIPTION";
     `P "Connect a disk to a specific VM.";
+    `P "If no path is provided then all read and write requests will succeed but no data will be modified. This is useful for testing only.";
+    `P "If a path is provided then it will be used as the backing file for the VM's disk. If no explicit format is specified then we assume RAW.";
   ] in
   let vm =
     let doc = "The domain, UUID or name of the VM to connect disk to." in
     Arg.(value & pos 0 (some string) None & info [ ] ~docv:"VM" ~doc) in
   let path =
-    let doc = "The path to the file containing the disk data." in
+    let doc = "The path to the backing file containing disk data." in
     Arg.(value & opt (some file) None & info [ "path" ] ~docv:"PATH" ~doc) in
-  Term.(ret (pure connect $ common_options_t $ vm $ path)),
+  let format =
+    let doc = "The format of the backing file." in
+    Arg.(value & opt (some string) (Some "raw") & info [ "format" ] ~docv:"FORMAT" ~doc) in 
+  Term.(ret (pure connect $ common_options_t $ vm $ path $ format)),
   Term.info "connect" ~sdocs:_common_options ~doc ~man
 
 let default_cmd = 
