@@ -289,7 +289,7 @@ let backend_of_path path format = match path, format with
   | Some x, None ->
     let fd = Unix.openfile x [ Unix.O_RDWR ] 0o0 in
     let stats = Unix.LargeFile.fstat fd in
-    let mmap = Lwt_bytes.map_file ~fd ~shared:false () in
+    let mmap = Lwt_bytes.map_file ~fd ~shared:true () in
     Unix.close fd;
     let module S = Server(struct
       include MMAP
