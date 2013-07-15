@@ -59,9 +59,6 @@ module MMAP = struct
     (* Tell the kernel that we are going to need the pages *)
     let len_bytes = len_sectors * sector_size in
     let offset_bytes = offset_sectors * sector_size in
-    Lwt_bytes.madvise mmap offset_bytes len_bytes Lwt_bytes.MADV_WILLNEED;
-    (* Wait until the last byte has been loaded *)
-    lwt () = Lwt_bytes.wait_mincore mmap (offset_bytes + len_bytes - 1) in
     let mmap' = Cstruct.of_bigarray mmap in
     Cstruct.blit mmap' offset_bytes buf 0 len_bytes;
     return ()
