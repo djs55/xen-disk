@@ -22,6 +22,7 @@ open Xs_protocol
 module Client = Xs_client.Client(Xs_transport_lwt_unix_client)
 open Client
 open Backend
+open Storage
 
 module Common = struct
   type t = {
@@ -37,8 +38,6 @@ let ( >>= ) = Blkproto.( >>= )
 
 let logger = Lwt_log.channel ~close_mode:`Keep ~channel:Lwt_io.stdout ()
 
-let sector_size = 512
-let empty_sector = String.make sector_size '\000'
 
 let get_my_domid client =
   with_xs client (fun xs ->
@@ -140,13 +139,23 @@ let handle_backend t client (domid,devid) =
     lwt () = Lwt_log.error_f ~logger "%s" (Blkproto.RingInfo.to_string ring_info) in
     let device_read page ofs sector_start sector_end =
       try_lwt
-        S.read t page ofs sector_start sector_end
+        let buf = Cstruct.of_bigarray page in
+        let len_sectors = sector_end - sector_start + 1 in
+        let len_bytes = len_sectors * sector_size in
+        let buf = Cstruct.sub buf (sector_start * sector_size) len_bytes in
+
+        S.read t buf ofs len_sectors
       with e ->
         lwt () = Lwt_log.error_f ~logger "read exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) ofs sector_start sector_end in
         Lwt.fail e in
     let device_write page ofs sector_start sector_end =
       try_lwt
-        S.write t page ofs sector_start sector_end
+        let buf = Cstruct.of_bigarray page in
+        let len_sectors = sector_end - sector_start + 1 in
+        let len_bytes = len_sectors * sector_size in
+        let buf = Cstruct.sub buf (sector_start * sector_size) len_bytes in
+
+        S.write t buf ofs len_sectors
       with e ->
         lwt () = Lwt_log.error_f ~logger "write exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) ofs sector_start sector_end in
         Lwt.fail e in

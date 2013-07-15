@@ -12,10 +12,12 @@
  * GNU Lesser General Public License for more details.
  *)
 
+let sector_size = 512
+
 module type S = sig
   type t
 
   val size: t -> int64
-  val read: t -> OS.Io_page.t -> int64 -> int -> int -> unit Lwt.t
-  val write: t -> OS.Io_page.t -> int64 -> int -> int -> unit Lwt.t
+  val read: t -> Cstruct.t -> int64 -> int -> unit Lwt.t
+  val write: t -> Cstruct.t -> int64 -> int  -> unit Lwt.t
 end
