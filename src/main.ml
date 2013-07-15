@@ -39,13 +39,6 @@ let logger = Lwt_log.channel ~close_mode:`Keep ~channel:Lwt_io.stdout ()
 let sector_size = 512
 let empty_sector = String.make sector_size '\000'
 
-module type STORAGE = sig
-  type t
-
-  val size: t -> int64
-  val read: t -> OS.Io_page.t -> int64 -> int -> int -> unit Lwt.t
-  val write: t -> OS.Io_page.t -> int64 -> int -> int -> unit Lwt.t
-end
 
 module DISCARD = struct
   type t = unit
@@ -174,7 +167,7 @@ let request_close client (domid, devid) =
   lwt backend_path = mk_backend_path client (domid,devid) in
   writev client (List.map (fun (k, v) -> backend_path ^ "/" ^ k, v) (Blkproto.State.to_assoc_list Blkproto.State.Closing))
 
-module Server(S: STORAGE) = struct
+module Server(S: Storage.S) = struct
 
 let handle_backend t client (domid,devid) =
   let xg = Gnttab.interface_open () in
