@@ -14,9 +14,15 @@
 
 let sector_size = 512
 
+type configuration = {
+  filename: string;
+  format: string option;
+}
+
 module type S = sig
   type t
 
+  val open_disk: configuration -> t option Lwt.t
   val size: t -> int64
   val read: t -> Cstruct.t -> int64 -> int -> unit Lwt.t
   val write: t -> Cstruct.t -> int64 -> int  -> unit Lwt.t

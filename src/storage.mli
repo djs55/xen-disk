@@ -14,11 +14,20 @@
 
 val sector_size: int
 
+type configuration = {
+  filename: string;      (** path where the data will be stored *)
+  format: string option; (** format of physical data *)
+}
+(** Information needed to "open" a disk *)
+
 module type S = sig
   (** A concrete mechanism to access and update a virtual disk. *)
 
   type t
   (** An open virtual disk *)
+
+  val open_disk: configuration -> t option Lwt.t
+  (** Given a configuration, attempt to open a virtual disk *)
 
   val size: t -> int64
   (** [size t] is the size of the virtual disk in bytes. The actual

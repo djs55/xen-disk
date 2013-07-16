@@ -221,27 +221,19 @@ let find_free_vbd client vm =
     |> (fun x -> x + 1) in
   return (Device_number.(to_xenstore_key (of_disk_number false free)))
 
-let backend_of_path path format = match path, format with
-  | None, _ ->
-    let module S = Server(DISCARD) in
-    return (S.handle_backend ())
-  | Some x, Some "raw"
-  | Some x, None ->
-    let fd = Unix.openfile x [ Unix.O_RDWR ] 0o0 in
-    let stats = Unix.LargeFile.fstat fd in
-    let mmap = Lwt_bytes.map_file ~fd ~shared:true () in
-    Unix.close fd;
-    let module S = Server(struct
-      include MMAP
-      let size _ = stats.Unix.LargeFile.st_size
-    end) in
-    return (S.handle_backend mmap)
-  | Some x, Some "vhd" ->
-    lwt vhd = Vhd.load_vhd x in
-    let module S = Server(VHD) in
-    return (S.handle_backend vhd)
-  | _, Some format ->
-    failwith (Printf.sprintf "Unknown format: %s" format)    
+let backend_of_path path format =
+  let configuration = {
+    filename = (match path with None -> "" | Some x -> x);
+    format;
+  } in
+  let backend = Backend.choose_backend configuration in
+  let module S = (val backend : S) in
+  match_lwt S.open_disk configuration with
+  | None ->
+    failwith "Failed to open_disk"
+  | Some t ->
+    let module S = Server(S) in
+    return (S.handle_backend t)
 
 let main (vm: string) path format =
   lwt client = make () in
