@@ -13,7 +13,7 @@
  *)
 
 let name = Filename.basename Sys.argv.(0)
-let project_url = "http://github.com/djs55/vhddisk"
+let project_url = "http://github.com/mirage/xen-disk"
 
 open Lwt
 open Blkback
@@ -352,7 +352,7 @@ let default_cmd =
   let doc = "manipulate virtual block devices on Xen virtual machines" in 
   let man = help in
   Term.(ret (pure (fun _ -> `Help (`Pager, None)) $ common_options_t)),
-  Term.info "blkback" ~version:"1.0.0" ~sdocs:_common_options ~doc ~man
+  Term.info "xen-disk" ~version:"1.0.0" ~sdocs:_common_options ~doc ~man
 
 let cmds = [ connect_command ]
 

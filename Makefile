@@ -1,22 +1,22 @@
+BINDIR?=/usr/local/bin
 
-.PHONY: dist/build/blkback/blkback
-dist/build/blkback/blkback: configure.done
+
+.PHONY: dist/build/xen-disk/xen-disk
+dist/build/xen-disk/xen-disk: dist/setup
 	obuild build
 
-configure.done: blkback.obuild
+dist/setup: xen-disk.obuild
 	obuild configure
-	touch configure.done
 
 .PHONY: install uninstall clean
 
-install: dist/build/blkback/blkback
+install: dist/build/xen-disk/xen-disk
 	mkdir -p $(BINDIR)
-	cp dist/build/blkback/blkback $(BINDIR)/blkback
+	cp dist/build/xen-disk/xen-disk $(BINDIR)/xen-disk
 
 uninstall:
-	rm -f $(BINDIR)/blkback
+	rm -f $(BINDIR)/xen-disk
 
 clean:
 	obuild clean
-	rm -f configure.done
 
