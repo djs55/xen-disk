@@ -1,11 +1,11 @@
 name: xen-disk 
-version: 1.0.0
+version: 1.0.1
 synopsis: Xen virtual disk server which supports multiple formats
 obuild-ver: 1
 
 executable xen-disk
   main: main.ml
   src-dir: src
-  build-deps: xenstore, xenstore.client, xenstore_transport.lwt, lwt, lwt.unix, vhd, xenblock, xenblock.back, xenctrl.lwt, cmdliner
+  build-deps: xenstore, xenstore.client, xenstore_transport.lwt, lwt, lwt.unix, vhd-disk, xenblock, xenblock.back, xenctrl.lwt, cmdliner
   pp: camlp4o
 
