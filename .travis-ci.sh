@@ -1,4 +1,4 @@
-OPAM_DEPENDS="obuild xenstore xenstore_transport lwt vhd-format xen-block-driver xenctrl cmdliner ounit"
+OPAM_DEPENDS="obuild xenstore xenstore_transport lwt vhd-format xen-block-driver xenctrl cmdliner ounit mirage-unix"
 
 case "$OCAML_VERSION,$OPAM_VERSION" in
 3.12.1,1.0.0) ppa=avsm/ocaml312+opam10 ;;
