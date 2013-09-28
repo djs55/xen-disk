@@ -22,11 +22,9 @@ opam --version
 opam --git-version
 
 opam init 
-opam install ${OPAM_DEPENDS}
-
 depext=`opam install -e ubuntu xen-disk`
 sudo apt-get install -qq $depext
-
+opam install ${OPAM_DEPENDS}
 eval `opam config env`
 make
 sudo make install
