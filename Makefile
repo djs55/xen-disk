@@ -1,6 +1,5 @@
 BINDIR?=/usr/local/bin
 
-
 .PHONY: dist/build/xen-disk/xen-disk
 dist/build/xen-disk/xen-disk: dist/setup
 	obuild build
@@ -10,7 +9,7 @@ dist/setup: xen-disk.obuild
 
 .PHONY: install uninstall clean
 
-install: dist/build/xen-disk/xen-disk
+install:
 	mkdir -p $(BINDIR)
 	cp dist/build/xen-disk/xen-disk $(BINDIR)/xen-disk
 
