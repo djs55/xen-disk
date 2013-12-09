@@ -1,3 +1,8 @@
+1.1.0 (9-Dec-2013):
+* remove VHD backend, since the Vhd library interface has
+  changed significantly
+* update to new xenstore client interface
+
 1.0.2 (25-Jul-2013):
 * change dependency from 'vhd' to 'vhd-format'
 
