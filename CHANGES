@@ -3,6 +3,9 @@
   changed significantly
 * update to new xenstore client interface
 
+1.0.3 (8-Aug-2013):
+* update to xenstore 1.2.2
+
 1.0.2 (25-Jul-2013):
 * change dependency from 'vhd' to 'vhd-format'
 
