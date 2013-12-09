@@ -25,41 +25,6 @@ module DISCARD = struct
   let write () _ _ _ = return ()
 end
 
-module VHD = struct
-  (** Virtual disks backed by vhd-format files accessed via mmap(2) *)
-
-  type t = Vhd.vhd
-
-  let size t = t.Vhd.footer.Vhd.f_current_size
-
-  let empty_sector = String.make sector_size '\000'
-
-  let open_disk configuration =
-    lwt vhd = Vhd.load_vhd configuration.filename in
-    return (Some vhd)
-
-  let read vhd buf offset_sectors len_sectors =
-    for_lwt i = 0 to len_sectors - 1 do
-      let this_sector = Int64.(add offset_sectors (of_int i)) in
-      match_lwt Vhd.get_sector_pos vhd this_sector with
-      | Some (mmap, ofs) ->
-        let ofs = Int64.to_int ofs in
-        let mmap' = Cstruct.of_bigarray mmap in
-        Cstruct.blit mmap' ofs buf (i * sector_size) sector_size;
-        return ()
-      | None ->
-        Cstruct.blit_from_string empty_sector 0 buf (i * sector_size) sector_size;
-        return ()
-    done
-
-  let write vhd buf offset_sectors len_sectors =
-    let sec = String.create sector_size in
-    for_lwt i = 0 to len_sectors - 1 do
-      Cstruct.blit_to_string buf (i * sector_size) sec 0 sector_size;
-      Vhd.write_sector vhd Int64.(add offset_sectors (of_int i)) sec
-    done
-end
-
 module MMAP = struct
   (** Virtual disks backed by (possibly sparse) files accessed via mmap(2) *)
   type t = int64 * Cstruct.t
@@ -95,8 +60,6 @@ let choose_backend { filename = filename; format = format } = match filename, fo
   | _, Some "raw"
   | _, None ->
     (module MMAP: Storage.S)
-  | _, Some "vhd" ->
-    (module VHD: Storage.S)
   | _, Some format ->
     failwith (Printf.sprintf "Unknown format: %s" format)
 
