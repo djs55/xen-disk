@@ -19,7 +19,7 @@ open Lwt
 open Blkback
 open Gnt
 open Xs_protocol
-module Client = Xs_client.Client(Xs_transport_lwt_unix_client)
+module Client = Xs_client_lwt.Client(Xs_transport_lwt_unix_client)
 open Client
 open Backend
 open Storage
@@ -40,7 +40,7 @@ let logger = Lwt_log.channel ~close_mode:`Keep ~channel:Lwt_io.stdout ()
 
 
 let get_my_domid client =
-  with_xs client (fun xs ->
+  immediate client (fun xs ->
     try_lwt
       lwt domid = read xs "domid" in
       return (int_of_string domid)
@@ -54,12 +54,12 @@ let mk_frontend_path client (domid,devid) =
   return (Printf.sprintf "/local/domain/%d/device/vbd/%d" domid devid)
 
 let writev client pairs =
-  with_xst client (fun xs ->
+  transaction client (fun xs ->
     Lwt_list.iter_s (fun (k, v) -> write xs k v) pairs
   )
 
 let readv client path keys =
-  lwt options = with_xs client (fun xs ->
+  lwt options = immediate client (fun xs ->
     Lwt_list.map_s (fun k ->
       try_lwt
         lwt v = read xs (path ^ "/" ^ k) in
@@ -68,13 +68,13 @@ let readv client path keys =
   ) in
   return (List.fold_left (fun acc x -> match x with None -> acc | Some y -> y :: acc) [] options)
 
-let read_one client k = with_xs client (fun xs ->
+let read_one client k = immediate client (fun xs ->
   try_lwt
     lwt v = read xs k in
     return (`OK v)
   with _ -> return (`Error ("failed to read: " ^ k)))
 
-let write_one client k v = with_xs client (fun xs -> write xs k v)
+let write_one client k v = immediate client (fun xs -> write xs k v)
 
 let exists client k = match_lwt read_one client k with `Error _ -> return false | _ -> return true
 
@@ -189,7 +189,7 @@ let find_vm client vm =
   if e
   then return (Some vm)
   else begin
-    lwt valid_domids = with_xs client (fun xs -> directory xs "/local/domain") in
+    lwt valid_domids = immediate client (fun xs -> directory xs "/local/domain") in
     lwt valid_uuids = Lwt_list.map_s (fun d ->
       match_lwt read_one client ("/local/domain/" ^ d ^ "/vm") with
       | `OK path -> return (Some (Filename.basename path))
@@ -211,7 +211,7 @@ let find_vm client vm =
 
 let (|>) a b = b a
 let find_free_vbd client vm =
-  lwt used = with_xs client (fun xs -> try_lwt directory xs (Printf.sprintf "/local/domain/%s/device/vbd" vm) with Xs_protocol.Enoent _ -> return []) in
+  lwt used = immediate client (fun xs -> try_lwt directory xs (Printf.sprintf "/local/domain/%s/device/vbd" vm) with Xs_protocol.Enoent _ -> return []) in
   let free =
     used
     |> List.map int_of_string
@@ -273,7 +273,7 @@ let main (vm: string) path format =
     media = Blkproto.Media.Disk;
     removable = false;
   }) in
-  lwt () = with_xst client (fun xs ->
+  lwt () = transaction client (fun xs ->
     Lwt_list.iter_s (fun (owner_domid, (k, v)) ->
       lwt () = write xs k v in
       let acl =
@@ -288,7 +288,7 @@ let main (vm: string) path format =
   (* Serve requests until the frontend closes: *)
   lwt () = t client (int_of_string vm, device) in
   (* Clean up the backend: *)
-  with_xs client (fun xs ->
+  immediate client (fun xs ->
     lwt () = rm xs backend_path in
     Printf.fprintf stderr "Cleaning up backend path %s\n%!" backend_path;
     lwt () = rm xs frontend_path in
