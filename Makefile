@@ -1,21 +1,38 @@
-BINDIR?=/usr/local/bin
+# OASIS_START
+# DO NOT EDIT (digest: 7b2408909643717852b95f994b273fee)
 
-.PHONY: dist/build/xen-disk/xen-disk
-dist/build/xen-disk/xen-disk: dist/setup
-	obuild build
+SETUP = ocaml setup.ml
 
-dist/setup: xen-disk.obuild
-	obuild configure
+build: setup.data
+	$(SETUP) -build $(BUILDFLAGS)
 
-.PHONY: install uninstall clean
+doc: setup.data build
+	$(SETUP) -doc $(DOCFLAGS)
 
-install:
-	mkdir -p $(BINDIR)
-	cp dist/build/xen-disk/xen-disk $(BINDIR)/xen-disk
+test: setup.data build
+	$(SETUP) -test $(TESTFLAGS)
 
-uninstall:
-	rm -f $(BINDIR)/xen-disk
+all:
+	$(SETUP) -all $(ALLFLAGS)
+
+install: setup.data
+	$(SETUP) -install $(INSTALLFLAGS)
+
+uninstall: setup.data
+	$(SETUP) -uninstall $(UNINSTALLFLAGS)
+
+reinstall: setup.data
+	$(SETUP) -reinstall $(REINSTALLFLAGS)
 
 clean:
-	obuild clean
+	$(SETUP) -clean $(CLEANFLAGS)
 
+distclean:
+	$(SETUP) -distclean $(DISTCLEANFLAGS)
+
+setup.data:
+	$(SETUP) -configure $(CONFIGUREFLAGS)
+
+.PHONY: build doc test all install uninstall reinstall clean distclean configure
+
+# OASIS_STOP
