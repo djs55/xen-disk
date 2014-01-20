@@ -1,0 +1,16 @@
+OASISFormat: 0.3
+Name:        xen-disk
+Version:     1.0.2
+Synopsis:    Create and manipulate block devices for xen VMs
+Authors:     David Scott
+License:     LGPL
+Plugins:     META (0.3)
+BuildTools:  ocamlbuild
+
+Executable "xen-disk"
+  CompiledObject:     best
+  Path:               src
+  MainIs:             main.ml
+  Custom:             true
+  Install:            false
+  BuildDepends:       io-page.unix, io-page, xenctrl, xenctrl.lwt, xenstore, xenstore.client, xenstore_transport.lwt, lwt, lwt.unix, vhd-format, mirage-block-xen, mirage-block-xen.back, cmdliner
