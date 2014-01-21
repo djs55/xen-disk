@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 864805139286f176ef33b99c8257da06)
+# DO NOT EDIT (digest: 3c1de74c93017f6cf0be85b45c6e6ece)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -16,10 +16,14 @@
 # Executable xen-disk
 <src/main.{native,byte}>: pkg_io-page.unix
 <src/main.{native,byte}>: pkg_io-page
-<src/main.{native,byte}>: pkg_xenctrl
-<src/main.{native,byte}>: pkg_xenctrl.lwt
+<src/main.{native,byte}>: pkg_xen-evtchn
+<src/main.{native,byte}>: pkg_xen-evtchn.unix
+<src/main.{native,byte}>: pkg_xen-evtchn.unix.activations
+<src/main.{native,byte}>: pkg_xen-gnt.unix
+<src/main.{native,byte}>: pkg_xen-gnt
 <src/main.{native,byte}>: pkg_xenstore
 <src/main.{native,byte}>: pkg_xenstore.client
+<src/main.{native,byte}>: pkg_xenstore_transport
 <src/main.{native,byte}>: pkg_xenstore_transport.lwt
 <src/main.{native,byte}>: pkg_lwt
 <src/main.{native,byte}>: pkg_lwt.unix
@@ -29,10 +33,14 @@
 <src/main.{native,byte}>: pkg_cmdliner
 <src/*.ml{,i}>: pkg_io-page.unix
 <src/*.ml{,i}>: pkg_io-page
-<src/*.ml{,i}>: pkg_xenctrl
-<src/*.ml{,i}>: pkg_xenctrl.lwt
+<src/*.ml{,i}>: pkg_xen-evtchn
+<src/*.ml{,i}>: pkg_xen-evtchn.unix
+<src/*.ml{,i}>: pkg_xen-evtchn.unix.activations
+<src/*.ml{,i}>: pkg_xen-gnt.unix
+<src/*.ml{,i}>: pkg_xen-gnt
 <src/*.ml{,i}>: pkg_xenstore
 <src/*.ml{,i}>: pkg_xenstore.client
+<src/*.ml{,i}>: pkg_xenstore_transport
 <src/*.ml{,i}>: pkg_xenstore_transport.lwt
 <src/*.ml{,i}>: pkg_lwt
 <src/*.ml{,i}>: pkg_lwt.unix

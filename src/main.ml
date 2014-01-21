@@ -17,6 +17,7 @@ let project_url = "http://github.com/mirage/xen-disk"
 
 open Lwt
 open Blkback
+module Blkback_server = Blkback.Make(Unix_activations)
 open Gnt
 open Xs_protocol
 module Client = Xs_client_lwt.Client(Xs_transport_lwt_unix_client)
@@ -159,7 +160,7 @@ let handle_backend t client (domid,devid) =
       with e ->
         lwt () = Lwt_log.error_f ~logger "write exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) ofs sector_start sector_end in
         Lwt.fail e in
-    let be_thread = Blkback.init xg xe domid ring_info Activations.wait {
+    let be_thread = Blkback_server.init xg xe domid ring_info Unix_activations.wait {
       Blkback.read = device_read;
       Blkback.write = device_write;
     } in
@@ -259,7 +260,6 @@ let main (vm: string) path format =
     ) [ Sys.sigint; Sys.sigterm ];
 
   (* Construct the device: *)
-  let (_: unit Lwt.t) = Activations.run (event_channel_interface ()) in
   lwt backend_path = mk_backend_path client (domid, device) in
   lwt frontend_path = mk_frontend_path client (domid, device) in
   lwt backend_domid = get_my_domid client in
