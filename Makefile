@@ -1,5 +1,3 @@
-# OASIS_START
-# DO NOT EDIT (digest: 7b2408909643717852b95f994b273fee)
 
 SETUP = ocaml setup.ml
 
@@ -16,10 +14,10 @@ all:
 	$(SETUP) -all $(ALLFLAGS)
 
 install: setup.data
-	$(SETUP) -install $(INSTALLFLAGS)
+	install main.native $(BINDIR)/xen-disk
 
 uninstall: setup.data
-	$(SETUP) -uninstall $(UNINSTALLFLAGS)
+	rm -f $(BINDIR)/xen-disk
 
 reinstall: setup.data
 	$(SETUP) -reinstall $(REINSTALLFLAGS)
@@ -35,4 +33,3 @@ setup.data:
 
 .PHONY: build doc test all install uninstall reinstall clean distclean configure
 
-# OASIS_STOP
