@@ -1,5 +1,6 @@
 trunk (unreleased)
 * build via OASIS and ocamlbuild
+* update to use new xen-{evtchn,gnt} ocamlfind packages
 
 1.1.0 (9-Dec-2013):
 * remove VHD backend, since the Vhd library interface has
