@@ -14,8 +14,41 @@
 open Lwt
 open Storage
 
+
+module UNIMPLEMENTED = struct
+  type 'a io = 'a Lwt.t
+
+  type id = string
+
+  type error = [
+    | `Unknown of string
+    | `Unimplemented
+    | `Is_read_only
+    | `Disconnected
+  ]
+
+  type page_aligned_buffer = Cstruct.t
+
+  type info = {
+    read_write: bool;
+    sector_size: int;
+    size_sectors: int64;
+  }
+
+  let get_info t = return { read_write = false; sector_size = 512; size_sectors = 0L }
+  let connect id = return `Unimplemented
+  let read t offset bufs = return `Unimplemented
+  let write t offset bufs = return `Unimplemented
+  let disconnect t = return ()
+end
+
+
 module DISCARD = struct
+  include UNIMPLEMENTED
+  (*
   (** Used to test the raw ring performance *)
+
+  type page_aligned_buffer = Cstruct.t
 
   type t = unit
 
@@ -23,9 +56,12 @@ module DISCARD = struct
   let size () = Int64.(mul (mul 128L 1024L) 1024L)
   let read () _ _ _ = return ()
   let write () _ _ _ = return ()
+  *)
 end
 
 module MMAP = struct
+  include UNIMPLEMENTED
+  (*
   (** Virtual disks backed by (possibly sparse) files accessed via mmap(2) *)
   type t = int64 * Cstruct.t
 
@@ -51,6 +87,7 @@ module MMAP = struct
     let len_bytes = len_sectors * sector_size in
     Cstruct.blit buf 0 mmap offset_bytes len_bytes;
     return () 
+    *)
 end
 
 (* Given a configuration, choose which backend to use *)

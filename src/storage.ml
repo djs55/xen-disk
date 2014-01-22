@@ -11,14 +11,15 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *)
-
+(*
 let sector_size = 512
-
+*)
 type configuration = {
   filename: string;
   format: string option;
 }
-
+module type S = V1_LWT.BLOCK
+(*
 module type S = sig
   type t
 
@@ -27,3 +28,4 @@ module type S = sig
   val read: t -> Cstruct.t -> int64 -> int -> unit Lwt.t
   val write: t -> Cstruct.t -> int64 -> int  -> unit Lwt.t
 end
+*)

@@ -11,15 +11,17 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *)
-
+(*
 val sector_size: int
-
+*)
 type configuration = {
   filename: string;      (** path where the data will be stored *)
   format: string option; (** format of physical data *)
 }
 (** Information needed to "open" a disk *)
 
+module type S = V1_LWT.BLOCK
+(*
 module type S = sig
   (** A concrete mechanism to access and update a virtual disk. *)
 
@@ -41,3 +43,4 @@ module type S = sig
   (** [write t buf offset_sectors len_sectors] copies [len_sectors]
       sectors from [buf] into [t] beginning at sector [offset_sectors]. *)
 end
+*)
