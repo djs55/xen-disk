@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 6c936de7a34a737d300d1adf02e6fcbf)
+# DO NOT EDIT (digest: 8cf98e9ad90ec4adb909e0759c037427)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -28,6 +28,7 @@
 <src/main.{native,byte}>: pkg_lwt
 <src/main.{native,byte}>: pkg_lwt.unix
 <src/main.{native,byte}>: pkg_vhd-format
+<src/main.{native,byte}>: pkg_mirage-block-unix
 <src/main.{native,byte}>: pkg_mirage-block-xen
 <src/main.{native,byte}>: pkg_mirage-block-xen.back
 <src/main.{native,byte}>: pkg_cmdliner
@@ -46,6 +47,7 @@
 <src/*.ml{,i}>: pkg_lwt
 <src/*.ml{,i}>: pkg_lwt.unix
 <src/*.ml{,i}>: pkg_vhd-format
+<src/*.ml{,i}>: pkg_mirage-block-unix
 <src/*.ml{,i}>: pkg_mirage-block-xen
 <src/*.ml{,i}>: pkg_mirage-block-xen.back
 <src/*.ml{,i}>: pkg_cmdliner
