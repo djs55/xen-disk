@@ -46,19 +46,17 @@ module DISCARD = struct
   include UNIMPLEMENTED
 
   type t = string
-  let id x = failwith "id"
-  (*
+  let id x = x
+
   (** Used to test the raw ring performance *)
 
-  type page_aligned_buffer = Cstruct.t
-
-  type t = unit
-
-  let open_disk _ = return (Some ())
-  let size () = Int64.(mul (mul 128L 1024L) 1024L)
-  let read () _ _ _ = return ()
-  let write () _ _ _ = return ()
-  *)
+  let mib = Int64.mul 1024L 1024L
+  let gib = Int64.mul mib 1024L
+  let get_info t = return { read_write = false; sector_size = 512; size_sectors = Int64.div gib 512L}
+  let connect id = return (`Ok id)
+  let read t offset bufs = return (`Ok ())
+  let write t offset bufs = return (`Ok ())
+  let disconnect t = return ()
 end
 
 (* Given a configuration, choose which backend to use *)
