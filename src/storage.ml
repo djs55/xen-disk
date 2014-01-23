@@ -19,6 +19,7 @@ type configuration = {
   format: string option;
 }
 module type S = V1_LWT.BLOCK
+  with type id := string
 (*
 module type S = sig
   type t

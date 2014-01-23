@@ -14,7 +14,6 @@
 open Lwt
 open Storage
 
-
 module UNIMPLEMENTED = struct
   type 'a io = 'a Lwt.t
 
@@ -36,15 +35,18 @@ module UNIMPLEMENTED = struct
   }
 
   let get_info t = return { read_write = false; sector_size = 512; size_sectors = 0L }
-  let connect id = return `Unimplemented
-  let read t offset bufs = return `Unimplemented
-  let write t offset bufs = return `Unimplemented
+  let connect id = return (`Error `Unimplemented)
+  let read t offset bufs = return (`Error `Unimplemented)
+  let write t offset bufs = return (`Error `Unimplemented)
   let disconnect t = return ()
 end
 
 
-module DISCARD = struct
+module DISCARD = (struct
   include UNIMPLEMENTED
+
+  type t = string
+  let id x = x
   (*
   (** Used to test the raw ring performance *)
 
@@ -57,10 +59,13 @@ module DISCARD = struct
   let read () _ _ _ = return ()
   let write () _ _ _ = return ()
   *)
-end
+end: V1_LWT.BLOCK)
 
 module MMAP = struct
   include UNIMPLEMENTED
+
+  type t = string
+  let id x = x
   (*
   (** Virtual disks backed by (possibly sparse) files accessed via mmap(2) *)
   type t = int64 * Cstruct.t

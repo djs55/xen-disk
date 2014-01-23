@@ -95,9 +95,18 @@ let request_close client (domid, devid) =
 
 module Server(S: Storage.S) = struct
 
-let handle_backend t client (domid,devid) =
+let (>>|=) m f = m >>= function
+  | `Ok x -> f x
+  | `Error (`Unknown x) -> fail (Failure (Printf.sprintf "Unknown %s" x))
+  | `Error `Unimplemented -> fail (Failure "Unimplemented")
+  | `Error `Is_read_only -> fail (Failure "Is_read_only")
+  | `Error `Disconnected -> fail (Failure "Disconnected")
+
+let handle_backend id client (domid,devid) =
   let xg = Gnttab.interface_open () in
   let xe = event_channel_interface () in
+
+  S.connect id >>|= fun t ->
 
   lwt backend_path = mk_backend_path client (domid,devid) in
 
@@ -108,11 +117,11 @@ let handle_backend t client (domid,devid) =
 
   try_lwt 
 
-    let size = S.size t in
+    lwt info = S.get_info t in
    
     (* Write the disk information for the frontend *)
-    let di = Blkproto.({ DiskInfo.sector_size = sector_size;
-                         sectors = Int64.div size (Int64.of_int sector_size);
+    let di = Blkproto.({ DiskInfo.sector_size = info.S.sector_size;
+                         sectors = info.S.size_sectors;
                          media = Media.Disk;
                          mode = Mode.ReadWrite }) in
     lwt () = writev client (List.map (fun (k, v) -> backend_path ^ "/" ^ k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
@@ -142,10 +151,11 @@ let handle_backend t client (domid,devid) =
       try_lwt
         let buf = Cstruct.of_bigarray page in
         let len_sectors = sector_end - sector_start + 1 in
-        let len_bytes = len_sectors * sector_size in
-        let buf = Cstruct.sub buf (sector_start * sector_size) len_bytes in
+        let len_bytes = len_sectors * info.S.sector_size in
+        let buf = Cstruct.sub buf (sector_start * info.S.sector_size) len_bytes in
 
-        S.read t buf ofs len_sectors
+        S.read t buf ofs len_sectors >>|= fun () ->
+        return ()
       with e ->
         lwt () = Lwt_log.error_f ~logger "read exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) ofs sector_start sector_end in
         Lwt.fail e in
@@ -156,7 +166,8 @@ let handle_backend t client (domid,devid) =
         let len_bytes = len_sectors * sector_size in
         let buf = Cstruct.sub buf (sector_start * sector_size) len_bytes in
 
-        S.write t buf ofs len_sectors
+        S.write t buf ofs len_sectors >>|= fun () ->
+        return ()
       with e ->
         lwt () = Lwt_log.error_f ~logger "write exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) ofs sector_start sector_end in
         Lwt.fail e in
@@ -229,12 +240,8 @@ let backend_of_path path format =
   } in
   let backend = Backend.choose_backend configuration in
   let module S = (val backend : S) in
-  match_lwt S.open_disk configuration with
-  | None ->
-    failwith "Failed to open_disk"
-  | Some t ->
-    let module S = Server(S) in
-    return (S.handle_backend t)
+  let module S' = Server(S) in
+  return (S'.handle_backend configuration.filename)
 
 let main (vm: string) path format =
   lwt client = make () in
