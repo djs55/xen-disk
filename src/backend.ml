@@ -42,11 +42,11 @@ module UNIMPLEMENTED = struct
 end
 
 
-module DISCARD = (struct
+module DISCARD = struct
   include UNIMPLEMENTED
 
   type t = string
-  let id x = x
+  let id x = failwith "id"
   (*
   (** Used to test the raw ring performance *)
 
@@ -59,13 +59,13 @@ module DISCARD = (struct
   let read () _ _ _ = return ()
   let write () _ _ _ = return ()
   *)
-end: V1_LWT.BLOCK)
+end
 
 module MMAP = struct
   include UNIMPLEMENTED
 
   type t = string
-  let id x = x
+  let id x = failwith "id"
   (*
   (** Virtual disks backed by (possibly sparse) files accessed via mmap(2) *)
   type t = int64 * Cstruct.t

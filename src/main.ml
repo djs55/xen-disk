@@ -93,20 +93,27 @@ let request_close client (domid, devid) =
   lwt backend_path = mk_backend_path client (domid,devid) in
   writev client (List.map (fun (k, v) -> backend_path ^ "/" ^ k, v) (Blkproto.State.to_assoc_list Blkproto.State.Closing))
 
+module BlockError = struct
+  open Lwt
+  let (>>=) x f = x >>= function
+  | `Ok x -> f x
+  | `Error (`Unknown x) -> fail (Failure x)
+  | `Error `Unimplemented -> fail (Failure "unimplemented in block device")
+  | `Error `Is_read_only -> fail (Failure "block device is read-only")
+  | `Error `Disconnected -> fail (Failure "block device is disconnected")
+  | `Error _ -> fail (Failure "unknown block device failure")
+end
+
+
 module Server(S: Storage.S) = struct
 
-let (>>|=) m f = m >>= function
-  | `Ok x -> f x
-  | `Error (`Unknown x) -> fail (Failure (Printf.sprintf "Unknown %s" x))
-  | `Error `Unimplemented -> fail (Failure "Unimplemented")
-  | `Error `Is_read_only -> fail (Failure "Is_read_only")
-  | `Error `Disconnected -> fail (Failure "Disconnected")
+let handle_backend (id: string) client (domid,devid) =
 
-let handle_backend id client (domid,devid) =
   let xg = Gnttab.interface_open () in
   let xe = event_channel_interface () in
 
-  S.connect id >>|= fun t ->
+  let open BlockError in
+  S.connect id >>= fun t ->
 
   lwt backend_path = mk_backend_path client (domid,devid) in
 
@@ -154,7 +161,7 @@ let handle_backend id client (domid,devid) =
         let len_bytes = len_sectors * info.S.sector_size in
         let buf = Cstruct.sub buf (sector_start * info.S.sector_size) len_bytes in
 
-        S.read t buf ofs len_sectors >>|= fun () ->
+        S.read t ofs [ buf ] >>= fun () ->
         return ()
       with e ->
         lwt () = Lwt_log.error_f ~logger "read exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) ofs sector_start sector_end in
@@ -163,10 +170,10 @@ let handle_backend id client (domid,devid) =
       try_lwt
         let buf = Cstruct.of_bigarray page in
         let len_sectors = sector_end - sector_start + 1 in
-        let len_bytes = len_sectors * sector_size in
-        let buf = Cstruct.sub buf (sector_start * sector_size) len_bytes in
+        let len_bytes = len_sectors * info.S.sector_size in
+        let buf = Cstruct.sub buf (sector_start * info.S.sector_size) len_bytes in
 
-        S.write t buf ofs len_sectors >>|= fun () ->
+        S.write t ofs [ buf ] >>= fun () ->
         return ()
       with e ->
         lwt () = Lwt_log.error_f ~logger "write exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) ofs sector_start sector_end in
