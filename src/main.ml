@@ -12,8 +12,19 @@
  * GNU Lesser General Public License for more details.
  *)
 
-let name = Filename.basename Sys.argv.(0)
 let project_url = "http://github.com/mirage/xen-disk"
+
+let name =
+  let sanitise x =
+    let x' = String.length x in
+    let y = String.create x' in
+    for i = 0 to x' - 1 do
+      y.[i] <- match x.[i] with
+               | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' -> x.[i]
+               | _ -> '_'
+    done;
+    y in
+ sanitise (Filename.basename Sys.argv.(0))
 
 open Lwt
 open Blkback
