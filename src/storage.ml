@@ -15,5 +15,5 @@ type configuration = {
   filename: string;
   format: string option;
 }
-module type S = V1_LWT.BLOCK
+module type BLOCK = V1_LWT.BLOCK
   with type id = string

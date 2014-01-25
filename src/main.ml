@@ -116,7 +116,8 @@ module BlockError = struct
 end
 
 
-module Server(S: Storage.S) = struct
+module Server(S: V1_LWT.BLOCK with type id = string) = struct
+
 
 let handle_backend (id: string) client (domid,devid) =
 
@@ -257,7 +258,7 @@ let backend_of_path path format =
     format;
   } in
   let backend = Backend.choose_backend configuration in
-  let module S = (val backend : S) in
+  let module S = (val backend : BLOCK) in
   let module S' = Server(S) in
   return (S'.handle_backend configuration.filename)
 

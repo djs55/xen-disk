@@ -62,10 +62,12 @@ end
 (* Given a configuration, choose which backend to use *)
 let choose_backend { filename = filename; format = format } = match filename, format with
   | "", _ ->
-    (module DISCARD: Storage.S)
+    (module DISCARD: BLOCK)
+  | _, Some "vhd" ->
+    (module Vhd_lwt.Block: BLOCK)
   | _, Some "raw"
   | _, None ->
-    (module Block: Storage.S)
+    (module Block: BLOCK)
   | _, Some format ->
     failwith (Printf.sprintf "Unknown format: %s" format)
 
