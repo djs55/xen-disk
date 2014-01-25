@@ -321,12 +321,13 @@ let main (vm: string) path format =
     return ()
   )
 
-let connect (common: Common.t) (vm: string option) (path: string option) (format: string option) =
-  let vm = match vm with
-    | None -> failwith "Please name a VM to attach the disk to"
-    | Some x -> x in
-  let () = Lwt_main.run (main vm path format) in
-  `Ok ()
+let connect (common: Common.t) (vm: string) (path: string option) (format: string option) =
+  match vm with
+    | "" ->
+      `Error(true, "I don't know which VM to operate on. Please supply a VM name or uuid.")
+    | vm ->
+      let () = Lwt_main.run (main vm path format) in
+      `Ok ()
 
 open Cmdliner
 
@@ -363,7 +364,7 @@ let connect_command =
   ] in
   let vm =
     let doc = "The domain, UUID or name of the VM to connect disk to." in
-    Arg.(value & pos 0 (some string) None & info [ ] ~docv:"VM" ~doc) in
+    Arg.(required & pos 0 (some string) None & info [ ] ~docv:"VM-name-or-uuid" ~doc) in
   let path =
     let doc = "The path to the backing file containing disk data." in
     Arg.(value & opt (some file) None & info [ "path" ] ~docv:"PATH" ~doc) in
