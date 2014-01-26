@@ -312,6 +312,7 @@ let main (vm: string) path format =
 
   lwt t = backend_of_path path format in
   (* Serve requests until the frontend closes: *)
+  Printf.fprintf stderr "Press Control+C to disconnect device.\n%!";
   lwt () = t client (int_of_string vm, device) in
   (* Clean up the backend: *)
   immediate client (fun xs ->
