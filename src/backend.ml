@@ -14,52 +14,60 @@
 open Lwt
 open Storage
 
-module DISCARD = struct
-  (** Used to test the raw ring performance *)
+module UNIMPLEMENTED = struct
+  type 'a io = 'a Lwt.t
 
-  type t = unit
+  type id = string
 
-  let open_disk _ = return (Some ())
-  let size () = Int64.(mul (mul 128L 1024L) 1024L)
-  let read () _ _ _ = return ()
-  let write () _ _ _ = return ()
+  type error = [
+    | `Unknown of string
+    | `Unimplemented
+    | `Is_read_only
+    | `Disconnected
+  ]
+
+  type page_aligned_buffer = Cstruct.t
+
+  type info = {
+    read_write: bool;
+    sector_size: int;
+    size_sectors: int64;
+  }
+
+  let get_info t = return { read_write = false; sector_size = 512; size_sectors = 0L }
+  let connect id = return (`Error `Unimplemented)
+  let read t offset bufs = return (`Error `Unimplemented)
+  let write t offset bufs = return (`Error `Unimplemented)
+  let disconnect t = return ()
 end
 
-module MMAP = struct
-  (** Virtual disks backed by (possibly sparse) files accessed via mmap(2) *)
-  type t = int64 * Cstruct.t
 
-  let open_disk configuration =
-    let fd = Unix.openfile configuration.filename [ Unix.O_RDWR ] 0o0 in
-    let stats = Unix.LargeFile.fstat fd in
-    let mmap = Lwt_bytes.map_file ~fd ~shared:true () in
-    Unix.close fd;
-    return (Some (stats.Unix.LargeFile.st_size, Cstruct.of_bigarray mmap))
+module DISCARD = struct
+  include UNIMPLEMENTED
 
-  let size = fst
+  type t = string
+  let id x = x
 
-  let read (_, mmap) buf offset_sectors len_sectors =
-    let offset_sectors = Int64.to_int offset_sectors in
-    let len_bytes = len_sectors * sector_size in
-    let offset_bytes = offset_sectors * sector_size in
-    Cstruct.blit mmap offset_bytes buf 0 len_bytes;
-    return ()
+  (** Used to test the raw ring performance *)
 
-  let write (_, mmap) buf offset_sectors len_sectors =
-    let offset_sectors = Int64.to_int offset_sectors in
-    let offset_bytes = offset_sectors * sector_size in
-    let len_bytes = len_sectors * sector_size in
-    Cstruct.blit buf 0 mmap offset_bytes len_bytes;
-    return () 
+  let mib = Int64.mul 1024L 1024L
+  let gib = Int64.mul mib 1024L
+  let get_info t = return { read_write = false; sector_size = 512; size_sectors = Int64.div gib 512L}
+  let connect id = return (`Ok id)
+  let read t offset bufs = return (`Ok ())
+  let write t offset bufs = return (`Ok ())
+  let disconnect t = return ()
 end
 
 (* Given a configuration, choose which backend to use *)
 let choose_backend { filename = filename; format = format } = match filename, format with
   | "", _ ->
-    (module DISCARD: Storage.S)
+    (module DISCARD: BLOCK)
+  | _, Some "vhd" ->
+    (module Vhd_lwt.Block: BLOCK)
   | _, Some "raw"
   | _, None ->
-    (module MMAP: Storage.S)
+    (module Block: BLOCK)
   | _, Some format ->
     failwith (Printf.sprintf "Unknown format: %s" format)
 

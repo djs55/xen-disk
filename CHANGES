@@ -1,6 +1,8 @@
 trunk (unreleased)
 * build via OASIS and ocamlbuild
 * update to use new xen-{evtchn,gnt} ocamlfind packages
+* update to consume mirage-types BLOCK signature
+* replace MMAP implementation with mirage-block-unix Block
 
 1.1.0 (9-Dec-2013):
 * remove VHD backend, since the Vhd library interface has

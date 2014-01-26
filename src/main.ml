@@ -12,8 +12,19 @@
  * GNU Lesser General Public License for more details.
  *)
 
-let name = Filename.basename Sys.argv.(0)
 let project_url = "http://github.com/mirage/xen-disk"
+
+let name =
+  let sanitise x =
+    let x' = String.length x in
+    let y = String.create x' in
+    for i = 0 to x' - 1 do
+      y.[i] <- match x.[i] with
+               | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' -> x.[i]
+               | _ -> '_'
+    done;
+    y in
+ sanitise (Filename.basename Sys.argv.(0))
 
 open Lwt
 open Blkback
@@ -93,11 +104,28 @@ let request_close client (domid, devid) =
   lwt backend_path = mk_backend_path client (domid,devid) in
   writev client (List.map (fun (k, v) -> backend_path ^ "/" ^ k, v) (Blkproto.State.to_assoc_list Blkproto.State.Closing))
 
-module Server(S: Storage.S) = struct
+module BlockError = struct
+  open Lwt
+  let (>>=) x f = x >>= function
+  | `Ok x -> f x
+  | `Error (`Unknown x) -> fail (Failure x)
+  | `Error `Unimplemented -> fail (Failure "unimplemented in block device")
+  | `Error `Is_read_only -> fail (Failure "block device is read-only")
+  | `Error `Disconnected -> fail (Failure "block device is disconnected")
+  | `Error _ -> fail (Failure "unknown block device failure")
+end
 
-let handle_backend t client (domid,devid) =
+
+module Server(S: V1_LWT.BLOCK with type id = string) = struct
+
+
+let handle_backend (id: string) client (domid,devid) =
+
   let xg = Gnttab.interface_open () in
   let xe = event_channel_interface () in
+
+  let open BlockError in
+  S.connect id >>= fun t ->
 
   lwt backend_path = mk_backend_path client (domid,devid) in
 
@@ -108,11 +136,11 @@ let handle_backend t client (domid,devid) =
 
   try_lwt 
 
-    let size = S.size t in
+    lwt info = S.get_info t in
    
     (* Write the disk information for the frontend *)
-    let di = Blkproto.({ DiskInfo.sector_size = sector_size;
-                         sectors = Int64.div size (Int64.of_int sector_size);
+    let di = Blkproto.({ DiskInfo.sector_size = info.S.sector_size;
+                         sectors = info.S.size_sectors;
                          media = Media.Disk;
                          mode = Mode.ReadWrite }) in
     lwt () = writev client (List.map (fun (k, v) -> backend_path ^ "/" ^ k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
@@ -142,10 +170,11 @@ let handle_backend t client (domid,devid) =
       try_lwt
         let buf = Cstruct.of_bigarray page in
         let len_sectors = sector_end - sector_start + 1 in
-        let len_bytes = len_sectors * sector_size in
-        let buf = Cstruct.sub buf (sector_start * sector_size) len_bytes in
+        let len_bytes = len_sectors * info.S.sector_size in
+        let buf = Cstruct.sub buf (sector_start * info.S.sector_size) len_bytes in
 
-        S.read t buf ofs len_sectors
+        S.read t ofs [ buf ] >>= fun () ->
+        return ()
       with e ->
         lwt () = Lwt_log.error_f ~logger "read exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) ofs sector_start sector_end in
         Lwt.fail e in
@@ -153,10 +182,11 @@ let handle_backend t client (domid,devid) =
       try_lwt
         let buf = Cstruct.of_bigarray page in
         let len_sectors = sector_end - sector_start + 1 in
-        let len_bytes = len_sectors * sector_size in
-        let buf = Cstruct.sub buf (sector_start * sector_size) len_bytes in
+        let len_bytes = len_sectors * info.S.sector_size in
+        let buf = Cstruct.sub buf (sector_start * info.S.sector_size) len_bytes in
 
-        S.write t buf ofs len_sectors
+        S.write t ofs [ buf ] >>= fun () ->
+        return ()
       with e ->
         lwt () = Lwt_log.error_f ~logger "write exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) ofs sector_start sector_end in
         Lwt.fail e in
@@ -228,13 +258,9 @@ let backend_of_path path format =
     format;
   } in
   let backend = Backend.choose_backend configuration in
-  let module S = (val backend : S) in
-  match_lwt S.open_disk configuration with
-  | None ->
-    failwith "Failed to open_disk"
-  | Some t ->
-    let module S = Server(S) in
-    return (S.handle_backend t)
+  let module S = (val backend : BLOCK) in
+  let module S' = Server(S) in
+  return (S'.handle_backend configuration.filename)
 
 let main (vm: string) path format =
   lwt client = make () in
@@ -296,12 +322,13 @@ let main (vm: string) path format =
     return ()
   )
 
-let connect (common: Common.t) (vm: string option) (path: string option) (format: string option) =
-  let vm = match vm with
-    | None -> failwith "Please name a VM to attach the disk to"
-    | Some x -> x in
-  let () = Lwt_main.run (main vm path format) in
-  `Ok ()
+let connect (common: Common.t) (vm: string) (path: string option) (format: string option) =
+  match vm with
+    | "" ->
+      `Error(true, "I don't know which VM to operate on. Please supply a VM name or uuid.")
+    | vm ->
+      let () = Lwt_main.run (main vm path format) in
+      `Ok ()
 
 open Cmdliner
 
@@ -338,7 +365,7 @@ let connect_command =
   ] in
   let vm =
     let doc = "The domain, UUID or name of the VM to connect disk to." in
-    Arg.(value & pos 0 (some string) None & info [ ] ~docv:"VM" ~doc) in
+    Arg.(required & pos 0 (some string) None & info [ ] ~docv:"VM-name-or-uuid" ~doc) in
   let path =
     let doc = "The path to the backing file containing disk data." in
     Arg.(value & opt (some file) None & info [ "path" ] ~docv:"PATH" ~doc) in
