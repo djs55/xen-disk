@@ -166,29 +166,19 @@ let handle_backend (id: string) client (domid,devid) =
       | `Error x -> failwith x in
      
     lwt () = Lwt_log.error_f ~logger "%s" (Blkproto.RingInfo.to_string ring_info) in
-    let device_read page ofs sector_start sector_end =
+    let device_read ofs bufs =
       try_lwt
-        let buf = Cstruct.of_bigarray page in
-        let len_sectors = sector_end - sector_start + 1 in
-        let len_bytes = len_sectors * info.S.sector_size in
-        let buf = Cstruct.sub buf (sector_start * info.S.sector_size) len_bytes in
-
-        S.read t ofs [ buf ] >>= fun () ->
+        S.read t ofs bufs >>= fun () ->
         return ()
       with e ->
-        lwt () = Lwt_log.error_f ~logger "read exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) ofs sector_start sector_end in
+        lwt () = Lwt_log.error_f ~logger "read exception: %s, offset=%Ld" (Printexc.to_string e) ofs in
         Lwt.fail e in
-    let device_write page ofs sector_start sector_end =
+    let device_write ofs bufs =
       try_lwt
-        let buf = Cstruct.of_bigarray page in
-        let len_sectors = sector_end - sector_start + 1 in
-        let len_bytes = len_sectors * info.S.sector_size in
-        let buf = Cstruct.sub buf (sector_start * info.S.sector_size) len_bytes in
-
-        S.write t ofs [ buf ] >>= fun () ->
+        S.write t ofs bufs >>= fun () ->
         return ()
       with e ->
-        lwt () = Lwt_log.error_f ~logger "write exception: %s, offset=%Ld sector_start=%d sector_end=%d" (Printexc.to_string e) ofs sector_start sector_end in
+        lwt () = Lwt_log.error_f ~logger "write exception: %s, offset=%Ld" (Printexc.to_string e) ofs in
         Lwt.fail e in
     let be_thread = Blkback_server.init xg xe domid ring_info Unix_activations.wait {
       Blkback.read = device_read;
