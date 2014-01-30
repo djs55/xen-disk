@@ -28,13 +28,12 @@ let name =
 
 open Lwt
 open Blkback
-module Blkback_server = Blkback.Make(Unix_activations)
-open Gnt
 open Xs_protocol
 module Client = Xs_client_lwt.Client(Xs_transport_lwt_unix_client)
 open Client
 open Backend
 open Storage
+open Gnt
 
 module Common = struct
   type t = {
@@ -50,158 +49,13 @@ let ( >>= ) = Blkproto.( >>= )
 
 let logger = Lwt_log.channel ~close_mode:`Keep ~channel:Lwt_io.stdout ()
 
-
-let get_my_domid client =
-  immediate client (fun xs ->
-    try_lwt
-      lwt domid = read xs "domid" in
-      return (int_of_string domid)
-    with Xs_protocol.Enoent _ -> return 0)
-
-let mk_backend_path client (domid,devid) =
-  lwt self = get_my_domid client in
-  return (Printf.sprintf "/local/domain/%d/backend/%s/%d/%d" self name domid devid)
-
-let mk_frontend_path client (domid,devid) =
-  return (Printf.sprintf "/local/domain/%d/device/vbd/%d" domid devid)
-
-let writev client pairs =
-  transaction client (fun xs ->
-    Lwt_list.iter_s (fun (k, v) -> write xs k v) pairs
-  )
-
-let readv client path keys =
-  lwt options = immediate client (fun xs ->
-    Lwt_list.map_s (fun k ->
-      try_lwt
-        lwt v = read xs (path ^ "/" ^ k) in
-        return (Some (k, v))
-      with _ -> return None) keys
-  ) in
-  return (List.fold_left (fun acc x -> match x with None -> acc | Some y -> y :: acc) [] options)
-
 let read_one client k = immediate client (fun xs ->
   try_lwt
     lwt v = read xs k in
     return (`OK v)
   with _ -> return (`Error ("failed to read: " ^ k)))
 
-let write_one client k v = immediate client (fun xs -> write xs k v)
-
 let exists client k = match_lwt read_one client k with `Error _ -> return false | _ -> return true
-
-let event_channel_interface =
-  let e = ref None in
-  fun () -> match !e with
-    | Some e -> e
-    | None ->
-      let e' = Eventchn.init () in
-      e := Some e';
-      e'
-
-(* Request a hot-unplug *)
-let request_close client (domid, devid) =
-  lwt backend_path = mk_backend_path client (domid,devid) in
-  writev client (List.map (fun (k, v) -> backend_path ^ "/" ^ k, v) (Blkproto.State.to_assoc_list Blkproto.State.Closing))
-
-module BlockError = struct
-  open Lwt
-  let (>>=) x f = x >>= function
-  | `Ok x -> f x
-  | `Error (`Unknown x) -> fail (Failure x)
-  | `Error `Unimplemented -> fail (Failure "unimplemented in block device")
-  | `Error `Is_read_only -> fail (Failure "block device is read-only")
-  | `Error `Disconnected -> fail (Failure "block device is disconnected")
-  | `Error _ -> fail (Failure "unknown block device failure")
-end
-
-
-module Server(S: V1_LWT.BLOCK with type id = string) = struct
-
-
-let handle_backend (id: string) client (domid,devid) =
-
-  let xg = Gnttab.interface_open () in
-  let xe = event_channel_interface () in
-
-  let open BlockError in
-  S.connect id >>= fun t ->
-
-  lwt backend_path = mk_backend_path client (domid,devid) in
-
-  (* Tell xapi we've noticed the backend *)
-  lwt () = write_one client
-    (backend_path ^ "/" ^ Blkproto.Hotplug._hotplug_status)
-    Blkproto.Hotplug._online in
-
-  try_lwt 
-
-    lwt info = S.get_info t in
-   
-    (* Write the disk information for the frontend *)
-    let di = Blkproto.({ DiskInfo.sector_size = info.S.sector_size;
-                         sectors = info.S.size_sectors;
-                         media = Media.Disk;
-                         mode = Mode.ReadWrite }) in
-    lwt () = writev client (List.map (fun (k, v) -> backend_path ^ "/" ^ k, v) (Blkproto.DiskInfo.to_assoc_list di)) in
-    lwt frontend_path = match_lwt read_one client (backend_path ^ "/frontend") with
-      | `Error x -> failwith x
-      | `OK x -> return x in
-   
-    (* wait for the frontend to enter state Initialised *)
-    lwt () = wait client (fun xs ->
-      try_lwt
-        lwt state = read xs (frontend_path ^ "/" ^ Blkproto.State._state) in
-        if Blkproto.State.of_string state = Some Blkproto.State.Initialised
-        || Blkproto.State.of_string state = Some Blkproto.State.Connected
-        then return ()
-        else raise Eagain
-      with Xs_protocol.Enoent _ -> raise Eagain
-    ) in
-
-    lwt frontend = readv client frontend_path Blkproto.RingInfo.keys in
-    lwt () = Lwt_log.error_f ~logger "3 (frontend state=3)\n" in
-    let ring_info = match Blkproto.RingInfo.of_assoc_list frontend with
-      | `OK x -> x
-      | `Error x -> failwith x in
-     
-    lwt () = Lwt_log.error_f ~logger "%s" (Blkproto.RingInfo.to_string ring_info) in
-    let device_read ofs bufs =
-      try_lwt
-        S.read t ofs bufs >>= fun () ->
-        return ()
-      with e ->
-        lwt () = Lwt_log.error_f ~logger "read exception: %s, offset=%Ld" (Printexc.to_string e) ofs in
-        Lwt.fail e in
-    let device_write ofs bufs =
-      try_lwt
-        S.write t ofs bufs >>= fun () ->
-        return ()
-      with e ->
-        lwt () = Lwt_log.error_f ~logger "write exception: %s, offset=%Ld" (Printexc.to_string e) ofs in
-        Lwt.fail e in
-    let be_thread = Blkback_server.init xg xe domid ring_info Unix_activations.wait {
-      Blkback.read = device_read;
-      Blkback.write = device_write;
-    } in
-    lwt () = writev client (List.map (fun (k, v) -> backend_path ^ "/" ^ k, v) (Blkproto.State.to_assoc_list Blkproto.State.Connected)) in
-
-    (* wait for the frontend to disappear or enter a Closed state *)
-    lwt () = wait client (fun xs -> 
-      try_lwt
-        lwt state = read xs (frontend_path ^ "/state") in
-        if Blkproto.State.of_string state <> (Some Blkproto.State.Closed)
-        then raise Eagain
-        else return ()
-      with Xs_protocol.Enoent _ ->
-        return ()
-    ) in
-    Lwt.cancel be_thread;
-    Lwt.return ()
-  with e ->
-    lwt () = Lwt_log.error_f ~logger "exn: %s" (Printexc.to_string e) in
-    return ()
-end
 
 let find_vm client vm =
   (* First interpret as a domain ID, then UUID, then name *)
@@ -242,16 +96,6 @@ let find_free_vbd client vm =
     |> (fun x -> x + 1) in
   return (Device_number.(to_xenstore_key (of_disk_number false free)))
 
-let backend_of_path path format =
-  let configuration = {
-    filename = (match path with None -> "" | Some x -> x);
-    format;
-  } in
-  let backend = Backend.choose_backend configuration in
-  let module S = (val backend : BLOCK) in
-  let module S' = Server(S) in
-  return (S'.handle_backend configuration.filename)
-
 let main (vm: string) path format =
   lwt client = make () in
   (* Figure out where the device is going to go: *)
@@ -259,15 +103,26 @@ let main (vm: string) path format =
     | Some vm -> return vm
     | None -> fail (Failure (Printf.sprintf "Failed to find VM %s" vm)) in
   Printf.fprintf stderr "Operating on VM domain id: %s\n%!" vm;
-  lwt device = find_free_vbd client vm in
+  lwt devid = find_free_vbd client vm in
   Printf.fprintf stderr "Creating device %d (linux device /dev/%s)\n%!"
-    device (Device_number.(to_linux_device (of_xenstore_key device)));
-  let domid = int_of_string vm in
+    devid (Device_number.(to_linux_device (of_xenstore_key devid)));
+  let device = int_of_string vm, devid in
+
+  let configuration = {
+    filename = (match path with None -> "" | Some x -> "buffered:" ^ x);
+    format;
+  } in
+  let backend = Backend.choose_backend configuration in
+  (* Serve requests until the frontend closes: *)
+  Printf.fprintf stderr "Press Control+C to disconnect device.\n%!";
+
+  let module S = (val backend : BLOCK) in
+  let module S' = Blkback.Make(Unix_activations)(Client)(S) in
 
   (* If we're asked to shutdown cleanly, initiate a hot-unplug *)
   let shutdown_signal _ =
     Printf.fprintf stderr "Received signal, requesting hot-unplug.\n%!";
-    let (_: unit Lwt.t) = request_close client (domid, device) in
+    let (_: unit Lwt.t) = S'.request_close name device in
     () in
   List.iter
     (fun signal ->
@@ -275,43 +130,9 @@ let main (vm: string) path format =
       ()
     ) [ Sys.sigint; Sys.sigterm ];
 
-  (* Construct the device: *)
-  lwt backend_path = mk_backend_path client (domid, device) in
-  lwt frontend_path = mk_frontend_path client (domid, device) in
-  lwt backend_domid = get_my_domid client in
-  let c = Blkproto.Connection.({
-    virtual_device = string_of_int device;
-    backend_path;
-    backend_domid;
-    frontend_path;
-    frontend_domid = domid;
-    mode = Blkproto.Mode.ReadWrite;
-    media = Blkproto.Media.Disk;
-    removable = false;
-  }) in
-  lwt () = transaction client (fun xs ->
-    Lwt_list.iter_s (fun (owner_domid, (k, v)) ->
-      lwt () = write xs k v in
-      let acl =
-        let open Xs_protocol.ACL in
-        { owner = owner_domid; other = READ; acl = [ ] } in
-      lwt () = setperms xs k acl in
-      return ()
-    ) (Blkproto.Connection.to_assoc_list c)
-  ) in
-
-  lwt t = backend_of_path path format in
-  (* Serve requests until the frontend closes: *)
-  Printf.fprintf stderr "Press Control+C to disconnect device.\n%!";
-  lwt () = t client (int_of_string vm, device) in
-  (* Clean up the backend: *)
-  immediate client (fun xs ->
-    lwt () = rm xs backend_path in
-    Printf.fprintf stderr "Cleaning up backend path %s\n%!" backend_path;
-    lwt () = rm xs frontend_path in
-    Printf.fprintf stderr "Cleaning up frontend path %s\n%!" frontend_path;
-    return ()
-  )
+  lwt () = S'.create name device in
+  lwt () = S'.run configuration.filename name device in 
+  S'.destroy name device
 
 let connect (common: Common.t) (vm: string) (path: string option) (format: string option) =
   match vm with
