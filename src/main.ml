@@ -96,7 +96,7 @@ let find_free_vbd client vm =
     |> (fun x -> x + 1) in
   return (Device_number.(to_xenstore_key (of_disk_number false free)))
 
-let main (vm: string) path format =
+let main (vm: string) path backend =
   lwt client = make () in
   (* Figure out where the device is going to go: *)
   lwt vm = match_lwt find_vm client vm with
@@ -110,7 +110,7 @@ let main (vm: string) path format =
 
   let configuration = {
     filename = (match path with None -> "" | Some x -> "buffered:" ^ x);
-    format;
+    backend;
   } in
   let backend = Backend.choose_backend configuration in
   (* Serve requests until the frontend closes: *)
@@ -134,12 +134,12 @@ let main (vm: string) path format =
   lwt () = S'.run configuration.filename name device in 
   S'.destroy name device
 
-let connect (common: Common.t) (vm: string) (path: string option) (format: string option) =
+let connect (common: Common.t) (vm: string) (path: string option) (backend: string option) =
   match vm with
     | "" ->
       `Error(true, "I don't know which VM to operate on. Please supply a VM name or uuid.")
     | vm ->
-      let () = Lwt_main.run (main vm path format) in
+      let () = Lwt_main.run (main vm path backend) in
       `Ok ()
 
 open Cmdliner
@@ -173,7 +173,7 @@ let connect_command =
     `S "DESCRIPTION";
     `P "Connect a disk to a specific VM.";
     `P "If no path is provided then all read and write requests will succeed but no data will be modified. This is useful for testing only.";
-    `P "If a path is provided then it will be used as the backing file for the VM's disk. If no explicit format is specified then we assume RAW.";
+    `P "If a path is provided then it will be used as the backing file for the VM's disk. If no explicit backend is specified then we assume RAW.";
   ] in
   let vm =
     let doc = "The domain, UUID or name of the VM to connect disk to." in
@@ -181,10 +181,10 @@ let connect_command =
   let path =
     let doc = "The path to the backing file containing disk data." in
     Arg.(value & opt (some file) None & info [ "path" ] ~docv:"PATH" ~doc) in
-  let format =
-    let doc = "The format of the backing file." in
-    Arg.(value & opt (some string) (Some "raw") & info [ "format" ] ~docv:"FORMAT" ~doc) in 
-  Term.(ret (pure connect $ common_options_t $ vm $ path $ format)),
+  let backend =
+    let doc = "The type of backing store." in
+    Arg.(value & opt (some string) (Some "raw") & info [ "backend" ] ~docv:"FORMAT" ~doc) in 
+  Term.(ret (pure connect $ common_options_t $ vm $ path $ backend)),
   Term.info "connect" ~sdocs:_common_options ~doc ~man
 
 let default_cmd = 

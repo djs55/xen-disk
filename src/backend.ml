@@ -117,7 +117,7 @@ end
 
 
 (* Given a configuration, choose which backend to use *)
-let choose_backend { filename = filename; format = format } = match filename, format with
+let choose_backend { filename; backend } = match filename, backend with
   | "", _ ->
     (module DISCARD: BLOCK)
   | _, Some "vhd" ->
@@ -127,6 +127,6 @@ let choose_backend { filename = filename; format = format } = match filename, fo
   | _, Some "raw"
   | _, None ->
     (module Block: BLOCK)
-  | _, Some format ->
-    failwith (Printf.sprintf "Unknown format: %s" format)
+  | _, Some backend ->
+    failwith (Printf.sprintf "Unknown format: %s" backend)
 

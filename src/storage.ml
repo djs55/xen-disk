@@ -13,7 +13,7 @@
  *)
 type configuration = {
   filename: string;
-  format: string option;
+  backend: string option;
 }
 module type BLOCK = V1_LWT.BLOCK
   with type id = string
