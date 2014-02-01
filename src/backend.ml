@@ -59,15 +59,74 @@ module DISCARD = struct
   let disconnect t = return ()
 end
 
+let buffered_prefix = "buffered:"
+let startswith prefix x =
+  let prefix' = String.length prefix in
+  let x' = String.length x in
+  prefix' <= x' && (String.sub x 0 prefix' = prefix)
+let filename_of_id id =
+  if startswith buffered_prefix id
+  then String.sub id (String.length buffered_prefix) (String.length id - (String.length buffered_prefix))
+  else id
+
+module MMAP = struct
+  include UNIMPLEMENTED
+
+  type t = {
+    id: string;
+    size: int64;
+    mmap: Cstruct.t;
+  }
+
+  let id t = t.id
+
+  let connect id =
+    let fd = Unix.openfile (filename_of_id id) [ Unix.O_RDWR ] 0o0 in
+    let stats = Unix.LargeFile.fstat fd in
+    let mmap = Cstruct.of_bigarray (Lwt_bytes.map_file ~fd ~shared:true ()) in
+    Unix.close fd;
+    let size = stats.Unix.LargeFile.st_size in
+    return (`Ok { id; size; mmap })
+
+  let disconnect t = return () (* mmap will be GCed *)
+
+  let get_info t =
+    return { read_write = true; sector_size = 512; size_sectors = Int64.div t.size 512L }
+
+  let forall offset bufs f =
+    let rec loop offset = function
+    | [] -> ()
+    | b :: bs ->
+      f offset b;
+      loop (offset + (Cstruct.len b)) bs in
+    loop (Int64.to_int offset * 512) bufs;
+    return (`Ok ())
+
+  let read t offset bufs =
+    forall offset bufs
+      (fun offset buf ->
+        Cstruct.blit t.mmap offset buf 0 (Cstruct.len buf)
+      )
+
+  let write t offset bufs =
+    forall offset bufs
+      (fun offset buf ->
+        Cstruct.blit buf 0 t.mmap offset (Cstruct.len buf)
+      )
+end
+
+
 (* Given a configuration, choose which backend to use *)
-let choose_backend { filename = filename; format = format } = match filename, format with
+let choose_backend { filename; backend } = match filename, backend with
   | "", _ ->
     (module DISCARD: BLOCK)
   | _, Some "vhd" ->
     (module Vhd_lwt.Block: BLOCK)
+  | _, Some "mmap" ->
+    (module MMAP: BLOCK)
   | _, Some "raw"
   | _, None ->
     (module Block: BLOCK)
-  | _, Some format ->
-    failwith (Printf.sprintf "Unknown format: %s" format)
+  | _, Some backend ->
+    failwith (Printf.sprintf "Unknown format: %s" backend)
 

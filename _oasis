@@ -1,6 +1,6 @@
 OASISFormat: 0.3
 Name:        xen-disk
-Version:     1.2.0
+Version:     1.2.1
 Synopsis:    Create and manipulate block devices for xen VMs
 Authors:     David Scott
 License:     LGPL
