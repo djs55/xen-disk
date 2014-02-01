@@ -93,25 +93,26 @@ module MMAP = struct
   let get_info t =
     return { read_write = true; sector_size = 512; size_sectors = Int64.div t.size 512L }
 
-  let read t offset bufs =
-    let rec read offset = function
+  let forall offset bufs f =
+    let rec loop offset = function
     | [] -> ()
     | b :: bs ->
-      let b_len = Cstruct.len b in
-      Cstruct.blit t.mmap offset b 0 b_len;
-      read (offset + b_len) bs in
-    read (Int64.to_int offset * 512) bufs;
+      f offset b;
+      loop (offset + (Cstruct.len b)) bs in
+    loop (Int64.to_int offset * 512) bufs;
     return (`Ok ())
 
+  let read t offset bufs =
+    forall offset bufs
+      (fun offset buf ->
+        Cstruct.blit t.mmap offset buf 0 (Cstruct.len buf)
+      )
+
   let write t offset bufs =
-    let rec write offset = function
-    | [] -> ()
-    | b :: bs ->
-      let b_len = Cstruct.len b in
-      Cstruct.blit b 0 t.mmap offset b_len;
-      write (offset + b_len) bs in
-    write (Int64.to_int offset * 512) bufs;
-    return (`Ok ())
+    forall offset bufs
+      (fun offset buf ->
+        Cstruct.blit buf 0 t.mmap offset (Cstruct.len buf)
+      )
 end
 
 
