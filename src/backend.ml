@@ -59,12 +59,70 @@ module DISCARD = struct
   let disconnect t = return ()
 end
 
+let buffered_prefix = "buffered:"
+let startswith prefix x =
+  let prefix' = String.length prefix in
+  let x' = String.length x in
+  prefix' <= x' && (String.sub x 0 prefix' = prefix)
+let filename_of_id id =
+  if startswith buffered_prefix id
+  then String.sub id (String.length buffered_prefix) (String.length id - (String.length buffered_prefix))
+  else id
+
+module MMAP = struct
+  include UNIMPLEMENTED
+
+  type t = {
+    id: string;
+    size: int64;
+    mmap: Cstruct.t;
+  }
+
+  let id t = t.id
+
+  let connect id =
+    let fd = Unix.openfile (filename_of_id id) [ Unix.O_RDWR ] 0o0 in
+    let stats = Unix.LargeFile.fstat fd in
+    let mmap = Cstruct.of_bigarray (Lwt_bytes.map_file ~fd ~shared:true ()) in
+    Unix.close fd;
+    let size = stats.Unix.LargeFile.st_size in
+    return (`Ok { id; size; mmap })
+
+  let disconnect t = return () (* mmap will be GCed *)
+
+  let get_info t =
+    return { read_write = true; sector_size = 512; size_sectors = Int64.div t.size 512L }
+
+  let read t offset bufs =
+    let rec read offset = function
+    | [] -> ()
+    | b :: bs ->
+      let b_len = Cstruct.len b in
+      Cstruct.blit t.mmap offset b 0 b_len;
+      read (offset + b_len) bs in
+    read (Int64.to_int offset * 512) bufs;
+    return (`Ok ())
+
+  let write t offset bufs =
+    let rec write offset = function
+    | [] -> ()
+    | b :: bs ->
+      let b_len = Cstruct.len b in
+      Cstruct.blit b 0 t.mmap offset b_len;
+      write (offset + b_len) bs in
+    write (Int64.to_int offset * 512) bufs;
+    return (`Ok ())
+end
+
+
 (* Given a configuration, choose which backend to use *)
 let choose_backend { filename = filename; format = format } = match filename, format with
   | "", _ ->
     (module DISCARD: BLOCK)
   | _, Some "vhd" ->
     (module Vhd_lwt.Block: BLOCK)
+  | _, Some "mmap" ->
+    (module MMAP: BLOCK)
   | _, Some "raw"
   | _, None ->
     (module Block: BLOCK)
