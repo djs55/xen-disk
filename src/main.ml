@@ -147,6 +147,10 @@ let main (vm: string) path backend =
   Printf.fprintf stderr "# request size stats\n";
   Printf.fprintf stderr "# segments-per-request frequency\n";
   Array.iteri (fun i n -> if n <> 0 then Printf.fprintf stderr "%d %d\n" i n) stats.Blkback.segments_per_request;
+  Printf.fprintf stderr "Total requests: %d\n" stats.Blkback.total_requests;
+  Printf.fprintf stderr "Total OK:       %d\n" stats.Blkback.total_ok;
+  Printf.fprintf stderr "Total Error:    %d\n" stats.Blkback.total_error;
+  Printf.fprintf stderr "Total missing:  %d\n" Blkback.(stats.total_requests - stats.total_ok - stats.total_error);
   S'.destroy name device
 
 let connect (common: Common.t) (vm: string) (path: string option) (backend: string option) =
