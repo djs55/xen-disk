@@ -144,6 +144,9 @@ let main (vm: string) path backend =
   Printf.fprintf stderr "# ring occupancy stats\n";
   Printf.fprintf stderr "# slots-occupied frequency\n";
   Array.iteri (fun i n -> if n <> 0 then Printf.fprintf stderr "%d %d\n" i n) stats.Blkback.ring_utilisation;
+  Printf.fprintf stderr "# request size stats\n";
+  Printf.fprintf stderr "# segments-per-request frequency\n";
+  Array.iteri (fun i n -> if n <> 0 then Printf.fprintf stderr "%d %d\n" i n) stats.Blkback.segments_per_request;
   S'.destroy name device
 
 let connect (common: Common.t) (vm: string) (path: string option) (backend: string option) =
