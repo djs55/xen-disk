@@ -96,7 +96,7 @@ let find_free_vbd client vm =
     |> (fun x -> x + 1) in
   return (Device_number.(to_xenstore_key (of_disk_number false free)))
 
-let main (vm: string) path backend =
+let main (vm: string) path backend max_indirect_segments =
   lwt client = make () in
   (* Figure out where the device is going to go: *)
   lwt vm = match_lwt find_vm client vm with
@@ -140,7 +140,7 @@ let main (vm: string) path backend =
     ) [ Sys.sigint; Sys.sigterm ];
 
   lwt () = S'.create name device in
-  lwt stats = S'.run configuration.filename name device in
+  lwt stats = S'.run ~max_indirect_segments configuration.filename name device in
   Printf.fprintf stderr "# ring occupancy stats\n";
   Printf.fprintf stderr "# slots-occupied frequency\n";
   Array.iteri (fun i n -> if n <> 0 then Printf.fprintf stderr "%d %d\n" i n) stats.Blkback.ring_utilisation;
@@ -153,12 +153,12 @@ let main (vm: string) path backend =
   Printf.fprintf stderr "Total missing:  %d\n" Blkback.(stats.total_requests - stats.total_ok - stats.total_error);
   S'.destroy name device
 
-let connect (common: Common.t) (vm: string) (path: string option) (backend: string option) =
+let connect (common: Common.t) (vm: string) (path: string option) (backend: string option) indirect_segments =
   match vm with
     | "" ->
       `Error(true, "I don't know which VM to operate on. Please supply a VM name or uuid.")
     | vm ->
-      let () = Lwt_main.run (main vm path backend) in
+      let () = Lwt_main.run (main vm path backend indirect_segments) in
       `Ok ()
 
 open Cmdliner
@@ -203,7 +203,10 @@ let connect_command =
   let backend =
     let doc = "The type of backing store." in
     Arg.(value & opt (some string) (Some "raw") & info [ "backend" ] ~docv:"FORMAT" ~doc) in 
-  Term.(ret (pure connect $ common_options_t $ vm $ path $ backend)),
+  let indirect_segments =
+    let doc = "The maximum number of indirect segments to advertise." in
+    Arg.(value & opt int 256 & info [ "indirect-segments" ] ~docv:"INDIRECT" ~doc) in
+  Term.(ret (pure connect $ common_options_t $ vm $ path $ backend $ indirect_segments)),
   Term.info "connect" ~sdocs:_common_options ~doc ~man
 
 let default_cmd = 
