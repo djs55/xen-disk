@@ -119,11 +119,20 @@ let main (vm: string) path backend =
   let module S = (val backend : BLOCK) in
   let module S' = Blkback.Make(Unix_activations)(Client)(S) in
 
-  (* If we're asked to shutdown cleanly, initiate a hot-unplug *)
+  (* If we're asked to shutdown cleanly, first initiate a hot-unplug.
+     If we're asked again, be more aggressive. *)
+  let already_asked = ref false in
   let shutdown_signal _ =
-    Printf.fprintf stderr "Received signal, requesting hot-unplug.\n%!";
-    let (_: unit Lwt.t) = S'.request_close name device in
-    () in
+    if not(!already_asked) then begin
+      already_asked := true;
+      Printf.fprintf stderr "Received signal, requesting hot-unplug.\n%!";
+      let (_: unit Lwt.t) = S'.request_close name device in
+      ()
+    end else begin
+      Printf.fprintf stderr "Received signal again, tearing down the backend.\n%!";
+      let (_: unit Lwt.t) = S'.force_close device in
+      ()
+    end in
   List.iter
     (fun signal ->
       let (_: Lwt_unix.signal_handler_id) = Lwt_unix.on_signal signal shutdown_signal in

@@ -1,3 +1,7 @@
+trunk (unreleased)
+* on second Control+C, tear down the device (requires
+  mirage-block-xen > 1.1.0)
+
 1.2.1 (1-Feb-2014):
 * add MMAP backend, for testing
 * change '--format' argument to '--backend'
