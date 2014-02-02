@@ -140,7 +140,10 @@ let main (vm: string) path backend =
     ) [ Sys.sigint; Sys.sigterm ];
 
   lwt () = S'.create name device in
-  lwt () = S'.run configuration.filename name device in 
+  lwt stats = S'.run configuration.filename name device in
+  Printf.fprintf stderr "# ring occupancy stats\n";
+  Printf.fprintf stderr "# slots-occupied frequency\n";
+  Array.iteri (fun i n -> if n <> 0 then Printf.fprintf stderr "%d %d\n" i n) stats.Blkback.ring_utilisation;
   S'.destroy name device
 
 let connect (common: Common.t) (vm: string) (path: string option) (backend: string option) =
