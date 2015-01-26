@@ -140,7 +140,11 @@ let main (vm: string) path backend max_indirect_segments =
     ) [ Sys.sigint; Sys.sigterm ];
 
   lwt () = S'.create name device in
-  lwt stats = S'.run ~max_indirect_segments configuration.filename name device in
+
+  match_lwt S.connect configuration.filename with
+  | `Error _err -> fail (Failure "Failed to connect to backend device")
+  | `Ok backend_dev ->
+  lwt stats = S'.run ~max_indirect_segments backend_dev name device in
   Printf.fprintf stderr "# ring occupancy stats\n";
   Printf.fprintf stderr "# slots-occupied frequency\n";
   Array.iteri (fun i n -> if n <> 0 then Printf.fprintf stderr "%d %d\n" i n) stats.Blkback.ring_utilisation;
