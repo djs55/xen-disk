@@ -15,5 +15,8 @@ type configuration = {
   filename: string;
   backend: string option;
 }
-module type BLOCK = V1_LWT.BLOCK
-  with type id = string
+module type BLOCK = sig
+  include V1_LWT.BLOCK
+    with type id = string
+  val connect : string -> [`Ok of t | `Error of error] io
+end
